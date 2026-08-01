@@ -1,0 +1,50 @@
+name: Build food data
+
+# Run from the Actions tab: "Build food data" -> "Run workflow".
+#
+# No schedule. Regenerating the bundled food dataset is an occasional maintenance
+# task, not something that needs to happen on a timer — the USDA's generic food
+# datasets change a few times a year, and a cron job would mostly commit nothing.
+on:
+  workflow_dispatch:
+
+# Only what the job actually does: commit the regenerated data file.
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Regenerate data/common-foods.json
+        # The USDA key comes from the repository secret USDA_API_KEY and is passed
+        # to the script as an environment variable. It is never a workflow input
+        # (inputs are echoed into the run summary), never written to a file, and
+        # never printed — the script redacts it from any URL it reports.
+        #
+        # Get a free key at https://fdc.nal.usda.gov/api-key-signup.html and store
+        # it under Settings -> Secrets and variables -> Actions.
+        env:
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+        run: node tools/build-common-foods.js
+
+      - name: Commit the result
+        run: |
+          if git diff --quiet -- data/common-foods.json; then
+            echo "No change to data/common-foods.json."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/common-foods.json
+          git commit -m "Update common foods dataset from USDA FoodData Central"
+          git push

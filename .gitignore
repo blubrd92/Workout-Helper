@@ -1,0 +1,21 @@
+# The app has no dependencies and no build step; nothing here is generated at
+# deploy time. These are local artefacts only.
+
+# Screenshots written by tests/browser/smoke.mjs --shots
+tests/browser/screens/
+
+# Playwright is not a project dependency — the smoke test picks up a global
+# install — but nothing stops someone installing it locally.
+node_modules/
+package-lock.json
+
+# Firebase CLI local state
+.firebase/
+firebase-debug.log
+firestore-debug.log
+
+# Editors and OS
+.DS_Store
+*.swp
+.vscode/
+.idea/
