@@ -49,6 +49,18 @@ export function clear(node, children = []) {
   return node;
 }
 
+/**
+ * Append children, skipping null / undefined / false.
+ *
+ * Use this instead of node.append(...) whenever a child is conditional:
+ * the DOM's own append() stringifies null into the literal text "null", which
+ * renders as visible junk rather than failing loudly.
+ */
+export function add(node, ...children) {
+  appendChildren(node, children);
+  return node;
+}
+
 export function $(selector, root = document) {
   return root.querySelector(selector);
 }

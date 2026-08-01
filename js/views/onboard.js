@@ -13,14 +13,15 @@
 import { el, sectionTitle, asyncButton } from '../components.js';
 import { planImportForm, loadStarterPlan } from '../plan-import.js';
 import * as store from '../store.js';
-import { toast } from '../util.js';
+import { toast, add } from '../util.js';
 
 export const title = 'Get started';
 
 export async function render(root, params, { navigate }) {
   const existingPlan = await store.getActivePlan();
 
-  root.append(
+  add(
+    root,
     el('div', { class: 'card' }, [
       el('h2', {}, 'Pick a starting point'),
       el('p', { class: 'small muted' },

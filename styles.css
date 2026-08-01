@@ -39,6 +39,14 @@
 
 * { box-sizing: border-box; }
 
+/*
+  The hidden attribute is how app.js swaps between the boot, signed-out and
+  signed-in shells. A display rule in this file would otherwise beat the browser's
+  default [hidden] { display: none } — which is exactly what happened to the boot
+  and sign-in screens, both of which set display: grid.
+*/
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
@@ -240,7 +248,8 @@ a { color: inherit; }
   padding: .5rem 0;
   min-height: var(--tap);
 }
-.btn.small { min-height: 34px; padding: .3rem .6rem; font-size: .82rem; }
+/* Smaller type and padding, but never a smaller target: 44px is a hard floor. */
+.btn.small { padding: .3rem .6rem; font-size: .82rem; }
 .btn.icon { padding: .4rem; min-height: var(--tap); min-width: var(--tap); }
 
 .field { display: block; margin-bottom: .7rem; }
@@ -268,7 +277,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible,
   outline: 2px solid var(--house-edge);
   outline-offset: 1px;
 }
-input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--house-edge); }
+/* File inputs are not covered by the rule above and default to ~21px tall. */
+input[type="file"] {
+  width: 100%;
+  min-height: var(--tap);
+  padding: .5rem .6rem;
+  font: inherit;
+  font-size: .9rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+/*
+  A checkbox cannot be 44px without looking absurd, so its tap target is the
+  44px-tall label wrapping it — clicking anywhere on that row toggles it.
+*/
+input[type="checkbox"] { width: 24px; height: 24px; flex: 0 0 auto; accent-color: var(--house-edge); }
 
 /* Chips: the main "minimise typing" control. Tap, don't type. */
 .chip {
@@ -470,8 +495,9 @@ input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--house-ed
 */
 .cal-cell.planned { border-color: var(--house-edge); border-style: dashed; }
 .cal-cell.today { background: var(--house-wash); font-weight: 650; color: var(--ink); }
-.cal-cell .cal-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ink); }
-.cal-cell .cal-dot.fallback { background: var(--muted); }
+/* Also used in the legend below the grid, so not scoped to .cal-cell. */
+.cal-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ink); flex: 0 0 auto; }
+.cal-dot.fallback { background: var(--muted); }
 .cal-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .7rem; font-size: .75rem; color: var(--faint); }
 .cal-legend span { display: inline-flex; align-items: center; gap: .3rem; }
 .legend-box { width: .8rem; height: .8rem; border-radius: 4px; border: 1px dashed var(--house-edge); }
@@ -498,7 +524,8 @@ th {
   top: 0;
 }
 td.sets { white-space: normal; min-width: 11rem; }
-td .set-pill {
+/* Used in the progression table and in the session detail, so not scoped to td. */
+.set-pill {
   display: inline-block;
   font-variant-numeric: tabular-nums;
   background: var(--house-wash);

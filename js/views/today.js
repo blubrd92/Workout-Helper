@@ -16,7 +16,7 @@ import { el, clear, sectionTitle, field, stepper, tankSelector, segmented, async
 import * as store from '../store.js';
 import { blankEntries, blankEntry, isEntryLogged, countLoggedSets, valueStep, valueLabel } from '../sets.js';
 import { exerciseKey } from '../plan-parser.js';
-import { todayISO, formatDate, toast, isValidISO, confirmDangerous } from '../util.js';
+import { todayISO, formatDate, toast, isValidISO, confirmDangerous, add } from '../util.js';
 import { WATCH_STATUSES } from '../config.js';
 import { auth } from '../firebase.js';
 
@@ -116,7 +116,7 @@ function countLogged(session) {
 // ---------------------------------------------------------------- picker
 
 function renderSessionPicker(root, { plan, settings, navigate }) {
-  root.append(
+  add(root,
     sectionTitle('Pick a session'),
     el('div', { class: 'card' }, [
       el('p', { class: 'small muted' }, `${plan.name} · effective ${plan.effective}`),
@@ -351,7 +351,7 @@ function renderExerciseCard(exercise, { persist, lastLoads }) {
   };
   renderSets();
 
-  card.append(
+  add(card,
     el('div', { class: 'exercise-head' }, [
       el('div', { class: 'grow' }, [
         el('h3', {}, exercise.name),
