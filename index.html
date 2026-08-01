@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<meta name="theme-color" content="#d4d9e4">
+<title>Ledger</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%23d4d9e4'/><path d='M9 8v16h14' stroke='%2316181d' stroke-width='2.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+</head>
+<body>
+
+<!-- Shown until Firebase reports whether anyone is signed in. -->
+<div id="boot" class="boot">
+  <p>Loading…</p>
+</div>
+
+<!--
+  Signed-out landing. Sign-in only: no marketing copy, no feature tour, nothing to
+  scroll. This app is for people who already know why they are here.
+-->
+<div id="signed-out" class="auth" hidden>
+  <div class="auth-card">
+    <h1 class="wordmark">Ledger</h1>
+    <p class="auth-sub">Training and nutrition log.</p>
+
+    <button id="google-signin" class="btn primary block">Continue with Google</button>
+
+    <details id="email-block" class="email-block">
+      <summary>Use email and password</summary>
+      <form id="email-form" novalidate>
+        <label class="field">
+          <span>Email</span>
+          <input type="email" id="email" autocomplete="email" inputmode="email" required>
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" id="password" autocomplete="current-password" minlength="6" required>
+        </label>
+        <div class="row gap">
+          <button type="submit" class="btn primary grow" data-mode="signin">Sign in</button>
+          <button type="button" class="btn grow" id="email-signup">Create account</button>
+        </div>
+        <button type="button" class="btn link" id="forgot">Forgot password</button>
+      </form>
+    </details>
+
+    <p id="auth-error" class="error" hidden></p>
+    <p id="auth-config-warning" class="notice" hidden>
+      Firebase is not configured yet. Add your project's config to
+      <code>firebase-config.js</code> — see <code>SETUP.md</code>.
+    </p>
+  </div>
+</div>
+
+<!-- The app proper. -->
+<div id="signed-in" hidden>
+  <header class="topbar">
+    <h1 id="view-title">Today</h1>
+    <span id="offline-flag" class="offline-flag" hidden title="Changes are saved on this device and will sync when you are back online">offline</span>
+  </header>
+
+  <main id="view" class="view" tabindex="-1"></main>
+
+  <nav class="tabbar" aria-label="Sections">
+    <a href="#/today"    data-tab="today">Today</a>
+    <a href="#/food"     data-tab="food">Food</a>
+    <a href="#/history"  data-tab="history">History</a>
+    <a href="#/progress" data-tab="progress">Progress</a>
+    <a href="#/settings" data-tab="settings">Settings</a>
+  </nav>
+</div>
+
+<script type="module" src="js/app.js"></script>
+<noscript><p style="padding:1rem">Ledger needs JavaScript.</p></noscript>
+</body>
+</html>

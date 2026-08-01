@@ -1,0 +1,43 @@
+rules_version = '2';
+
+// Ledger security rules.
+//
+// The whole model in one sentence: a signed-in user can read and write documents
+// under users/{uid} when uid is their own, and nothing else exists.
+//
+// There is no data sharing between accounts in v1, so there is no rule granting
+// any cross-account access — not read, not list, not query. Every account is an
+// island, and these rules are what make that true rather than merely intended.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+// or paste into: Firebase console → Firestore Database → Rules → Publish.
+// See SETUP.md.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // The user's own root document: settings, schema version, active plan pointer.
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Everything else the app stores hangs off that document:
+      //   plans/, sessions/, foods/, meals/, nutrition/
+      // The wildcard covers all of them with the same ownership check, including
+      // any collection added later — a new feature cannot accidentally ship
+      // without a rule.
+      match /{collection}/{docId} {
+        allow read, write: if isOwner(uid);
+
+        // Depth guard: nothing in this app nests deeper than two levels. Any
+        // deeper path is a bug, and unmatched paths are denied by default.
+      }
+    }
+
+    // Anything outside /users/{uid} is denied. Firestore denies unmatched paths by
+    // default; this empty-by-omission is deliberate, not an oversight.
+  }
+}

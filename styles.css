@@ -1,0 +1,579 @@
+/*
+  Ledger — styles.
+
+  Mobile-first and thumb-first. The primary target is a phone browser held in one
+  hand mid-workout, so: navigation sits at the bottom, every control is at least
+  44px tall, and nothing important requires precision.
+
+  Layout is verified at 390px wide. Desktop gets a centred column and nothing more.
+
+  On color: --house is the user's house color and the only accent. It is a pale
+  blue-grey, so it is used as a FILL behind dark text (never as text on white,
+  where it would fail contrast). Red appears in exactly two places: destructive
+  buttons, and the red option of the watch-item selector. It never appears in
+  response to a missed session or a calorie total — see the adherence rules in the
+  README.
+*/
+
+:root {
+  --house: #d4d9e4;          /* mirrored as HOUSE in js/config.js */
+  --house-edge: #aeb7c9;     /* darker house, for borders and focus rings */
+  --house-wash: #eef0f5;     /* very light house, for subtle fills */
+
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --ink: #16181d;
+  --muted: #5f6673;
+  --faint: #8b919d;
+  --line: #e2e5ea;
+
+  --danger: #9b2c2c;
+  --green: #2f7d4f;
+  --yellow: #a5761b;
+
+  --radius: 12px;
+  --tap: 44px;               /* minimum tap target, per the spec */
+  --pad: 14px;
+  --maxw: 34rem;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+h2 { font-size: 1.05rem; }
+h3 { font-size: .95rem; }
+p { margin: 0 0 .6em; }
+a { color: inherit; }
+
+/* ---------------------------------------------------------------- shell */
+
+.boot, .auth {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: max(.6rem, env(safe-area-inset-top)) var(--pad) .6rem;
+  background: var(--house);
+  border-bottom: 1px solid var(--house-edge);
+}
+.topbar h1 { font-size: 1.05rem; font-weight: 650; letter-spacing: .01em; }
+
+.offline-flag {
+  margin-left: auto;
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  border: 1px solid var(--house-edge);
+  border-radius: 999px;
+  padding: .12rem .5rem;
+  background: #fff8;
+}
+
+.view {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: var(--pad) var(--pad) calc(var(--tap) + 2.6rem);
+  outline: none;
+}
+
+/* Bottom nav: five equal targets within thumb reach. */
+.tabbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar a {
+  min-height: var(--tap);
+  display: grid;
+  place-items: center;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: .78rem;
+  padding: .5rem .2rem;
+  border-top: 3px solid transparent;
+}
+.tabbar a[aria-current="page"] {
+  color: var(--ink);
+  font-weight: 650;
+  border-top-color: var(--house-edge);
+  background: var(--house-wash);
+}
+
+/* ---------------------------------------------------------------- auth */
+
+.auth-card {
+  width: 100%;
+  max-width: 22rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.4rem;
+}
+.wordmark { font-size: 1.6rem; letter-spacing: -.01em; }
+.auth-sub { color: var(--muted); margin-bottom: 1.2rem; font-size: .92rem; }
+.email-block { margin-top: 1rem; }
+.email-block summary {
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  color: var(--muted);
+  font-size: .9rem;
+  cursor: pointer;
+}
+.email-block[open] summary { color: var(--ink); }
+
+/* ---------------------------------------------------------------- blocks */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--pad);
+  margin-bottom: .75rem;
+}
+.card > h2, .card > h3 { margin-bottom: .5rem; }
+
+.section-title {
+  font-size: .78rem;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--faint);
+  margin: 1.2rem 0 .5rem;
+}
+.section-title:first-child { margin-top: 0; }
+
+.row { display: flex; align-items: center; }
+.row.gap { gap: .5rem; }
+.row.wrap { flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.grow { flex: 1; }
+.spacer { flex: 1; }
+.stack > * + * { margin-top: .6rem; }
+
+.muted { color: var(--muted); }
+.small { font-size: .84rem; }
+.faint { color: var(--faint); }
+.mono { font-variant-numeric: tabular-nums; }
+.center { text-align: center; }
+.nowrap { white-space: nowrap; }
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+  padding: 2rem 1rem;
+  font-size: .92rem;
+}
+
+.error {
+  color: var(--danger);
+  background: #fdf3f3;
+  border: 1px solid #f0d8d8;
+  border-radius: 8px;
+  padding: .6rem .7rem;
+  font-size: .88rem;
+}
+.notice {
+  color: var(--muted);
+  background: var(--house-wash);
+  border: 1px solid var(--house-edge);
+  border-radius: 8px;
+  padding: .6rem .7rem;
+  font-size: .88rem;
+}
+
+/* ---------------------------------------------------------------- controls */
+
+.btn {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: .5rem .9rem;
+  font: inherit;
+  font-size: .93rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn:active { transform: translateY(1px); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.btn.primary { background: var(--house); border-color: var(--house-edge); font-weight: 600; }
+.btn.block { width: 100%; }
+.btn.danger { color: var(--danger); border-color: #e6c9c9; background: #fdf7f7; }
+.btn.link {
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  padding: .5rem 0;
+  min-height: var(--tap);
+}
+.btn.small { min-height: 34px; padding: .3rem .6rem; font-size: .82rem; }
+.btn.icon { padding: .4rem; min-height: var(--tap); min-width: var(--tap); }
+
+.field { display: block; margin-bottom: .7rem; }
+.field > span {
+  display: block;
+  font-size: .8rem;
+  color: var(--muted);
+  margin-bottom: .25rem;
+}
+input[type="text"], input[type="email"], input[type="password"], input[type="number"],
+input[type="date"], input[type="search"], textarea, select {
+  width: 100%;
+  min-height: var(--tap);
+  padding: .5rem .6rem;
+  font: inherit;
+  font-size: 1rem;                 /* 16px keeps iOS from zooming on focus */
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+textarea { min-height: 9rem; resize: vertical; line-height: 1.4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+input:focus-visible, textarea:focus-visible, select:focus-visible,
+.btn:focus-visible, .chip:focus-visible, a:focus-visible {
+  outline: 2px solid var(--house-edge);
+  outline-offset: 1px;
+}
+input[type="checkbox"] { width: 22px; height: 22px; accent-color: var(--house-edge); }
+
+/* Chips: the main "minimise typing" control. Tap, don't type. */
+.chip {
+  min-height: var(--tap);
+  padding: .4rem .75rem;
+  font: inherit;
+  font-size: .88rem;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  -webkit-tap-highlight-color: transparent;
+}
+.chip.on { background: var(--house); border-color: var(--house-edge); font-weight: 600; }
+.chip.wide { flex: 1; justify-content: center; }
+
+.chips { display: flex; flex-wrap: wrap; gap: .4rem; }
+
+/* Stepper: −  value  + . Bigger than it looks like it needs to be, on purpose. */
+.stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--surface);
+}
+.stepper button {
+  width: var(--tap);
+  min-height: var(--tap);
+  font-size: 1.25rem;
+  line-height: 1;
+  background: var(--house-wash);
+  color: var(--ink);
+  border: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.stepper button:active { background: var(--house); }
+.stepper input {
+  width: 3.6rem;
+  min-height: var(--tap);
+  text-align: center;
+  border: none;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  border-radius: 0;
+  font-variant-numeric: tabular-nums;
+  font-size: 1rem;
+}
+
+/* Segmented control, used for tank values and the watch-item selector. */
+.segmented { display: flex; gap: .3rem; }
+.segmented button {
+  flex: 1;
+  min-height: var(--tap);
+  font: inherit;
+  font-size: .9rem;
+  background: var(--surface);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+  -webkit-tap-highlight-color: transparent;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--house);
+  border-color: var(--house-edge);
+  color: var(--ink);
+  font-weight: 650;
+}
+.segmented.watch button[aria-pressed="true"][data-status="green"]  { background: #d9ecdf; border-color: var(--green); color: #1d5334; }
+.segmented.watch button[aria-pressed="true"][data-status="yellow"] { background: #f6ecd2; border-color: var(--yellow); color: #6d4d0d; }
+.segmented.watch button[aria-pressed="true"][data-status="red"]    { background: #f4dcdc; border-color: var(--danger); color: #6f1f1f; }
+
+/* ---------------------------------------------------------------- exercise cards */
+
+.exercise { border-left: 3px solid var(--house); }
+.exercise.done { border-left-color: var(--green); background: #fcfdfc; }
+.exercise-head { display: flex; align-items: flex-start; gap: .5rem; }
+.exercise-head h3 { flex: 1; }
+.exercise .target { font-size: .85rem; color: var(--muted); }
+.exercise .cues { font-size: .78rem; color: var(--faint); margin-top: .3rem; line-height: 1.35; }
+.exercise .video { font-size: .8rem; color: var(--muted); }
+
+.check {
+  width: var(--tap);
+  height: var(--tap);
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 1.1rem;
+  color: var(--faint);
+  cursor: pointer;
+  flex: 0 0 auto;
+}
+.check[aria-pressed="true"] { background: #e4f0e8; border-color: var(--green); color: var(--green); }
+
+.set-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: .45rem 0;
+  border-top: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.set-label {
+  font-size: .78rem;
+  color: var(--faint);
+  width: 2.6rem;
+  flex: 0 0 auto;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.set-row .tank { flex: 1 1 100%; }
+.tank-label { font-size: .72rem; color: var(--faint); margin: .15rem 0 .2rem; }
+
+/* ---------------------------------------------------------------- lists */
+
+.list { list-style: none; margin: 0; padding: 0; }
+.list li { border-bottom: 1px solid var(--line); }
+.list li:last-child { border-bottom: none; }
+.list-row {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .6rem 0;
+  background: none;
+  border: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.list-row .title { flex: 1; min-width: 0; }
+.list-row .title b { font-weight: 600; display: block; }
+.list-row .meta { font-size: .8rem; color: var(--muted); }
+.list-row .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: .88rem; white-space: nowrap; }
+
+.badge {
+  font-size: .7rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: .1rem .4rem;
+  border-radius: 5px;
+  background: var(--house-wash);
+  border: 1px solid var(--house-edge);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.dot { width: .55rem; height: .55rem; border-radius: 50%; display: inline-block; }
+.dot.green { background: var(--green); }
+.dot.yellow { background: var(--yellow); }
+.dot.red { background: var(--danger); }
+
+/* ---------------------------------------------------------------- calendar */
+
+.cal-head { display: flex; align-items: center; gap: .4rem; margin-bottom: .6rem; }
+.cal-head h2 { flex: 1; text-align: center; font-size: 1rem; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-grid .dow {
+  text-align: center;
+  font-size: .68rem;
+  color: var(--faint);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  padding-bottom: .2rem;
+}
+.cal-cell {
+  aspect-ratio: 1;
+  min-height: 40px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .15rem;
+  border-radius: 8px;
+  background: none;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: .8rem;
+  color: var(--muted);
+  cursor: default;
+  -webkit-tap-highlight-color: transparent;
+}
+.cal-cell.has-session { cursor: pointer; color: var(--ink); }
+/*
+  A planned day with no session gets a dotted outline and nothing else — the same
+  visual weight as any other empty day. No red, no warning, no count. This is the
+  adherence rule in CSS: show what happened, never editorialise about what didn't.
+*/
+.cal-cell.planned { border-color: var(--house-edge); border-style: dashed; }
+.cal-cell.today { background: var(--house-wash); font-weight: 650; color: var(--ink); }
+.cal-cell .cal-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ink); }
+.cal-cell .cal-dot.fallback { background: var(--muted); }
+.cal-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .7rem; font-size: .75rem; color: var(--faint); }
+.cal-legend span { display: inline-flex; align-items: center; gap: .3rem; }
+.legend-box { width: .8rem; height: .8rem; border-radius: 4px; border: 1px dashed var(--house-edge); }
+
+/* ---------------------------------------------------------------- tables */
+
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table { border-collapse: collapse; width: 100%; font-size: .86rem; }
+th, td {
+  text-align: left;
+  padding: .45rem .5rem;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+  vertical-align: top;
+}
+th {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  color: var(--faint);
+  font-weight: 600;
+  background: var(--house-wash);
+  position: sticky;
+  top: 0;
+}
+td.sets { white-space: normal; min-width: 11rem; }
+td .set-pill {
+  display: inline-block;
+  font-variant-numeric: tabular-nums;
+  background: var(--house-wash);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .05rem .35rem;
+  margin: .1rem .2rem .1rem 0;
+  font-size: .82rem;
+}
+
+/* ---------------------------------------------------------------- totals */
+
+.totals { display: grid; grid-template-columns: 1fr 1fr; gap: .6rem; }
+.total {
+  background: var(--house-wash);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: .6rem .7rem;
+}
+.total .k { font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--faint); }
+.total .v { font-size: 1.35rem; font-weight: 650; font-variant-numeric: tabular-nums; }
+/* Over target is a number, not an alarm — same neutrality as adherence. */
+.total .sub { font-size: .78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---------------------------------------------------------------- toast */
+
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--tap) + 1.2rem + env(safe-area-inset-bottom));
+  transform: translate(-50%, .5rem);
+  background: var(--ink);
+  color: #fff;
+  font-size: .87rem;
+  padding: .55rem .9rem;
+  border-radius: 999px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s, transform .15s;
+  z-index: 20;
+  max-width: 90vw;
+  text-align: center;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------------------------------------------------------------- modal */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #16181d66;
+  z-index: 30;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.sheet {
+  background: var(--surface);
+  width: 100%;
+  max-width: var(--maxw);
+  max-height: 88dvh;
+  overflow-y: auto;
+  border-radius: 16px 16px 0 0;
+  padding: var(--pad) var(--pad) calc(var(--pad) + env(safe-area-inset-bottom));
+}
+.sheet-head { display: flex; align-items: center; gap: .5rem; margin-bottom: .8rem; }
+.sheet-head h2 { flex: 1; }
+
+@media (min-width: 40rem) {
+  .sheet-backdrop { align-items: center; }
+  .sheet { border-radius: 16px; max-height: 80dvh; }
+  .tabbar { max-width: var(--maxw); margin: 0 auto; border-radius: 12px 12px 0 0; border: 1px solid var(--line); border-bottom: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+  .btn:active { transform: none; }
+}
