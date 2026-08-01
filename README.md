@@ -21,6 +21,11 @@ minutes.
 - **Read it back** as a per-exercise progression table: every time you did a
   movement, newest first, with load and every set. This table is the point of the
   whole app.
+- **Backfill past sessions.** Set the date on the session picker and it stays set
+  until you clear it, so catching up a week of paper logs means setting it once
+  and entering several in a row. It resets on reload, so a forgotten backfill date
+  cannot quietly swallow next week's training. Any saved session's date can also
+  be corrected from History → Edit.
 - **Track nutrition** against daily calorie and protein targets, from your own
   food library, your saved meals, a bundled dataset of common foods, or by hand.
 - **Track weight** as a weekly average, because the trend is the signal and a

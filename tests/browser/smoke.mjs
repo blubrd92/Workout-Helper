@@ -215,6 +215,47 @@ async function run(page, shot) {
     (await page.textContent('.set-pill')).includes('10 @2'));
   await shot('04-session-detail');
 
+  // ---- backfilling a past session
+  step('Backfilling a session to a past date');
+  await page.click('a[data-tab="today"]');
+  await page.waitForSelector('input[aria-label="Date to log against"]', { timeout: 10000 });
+
+  // Ten days back, computed the same way the app computes local dates.
+  const pastDate = await page.evaluate(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 10);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  });
+
+  await page.fill('input[aria-label="Date to log against"]', pastDate);
+  await page.waitForSelector('.card.backfilling', { timeout: 5000 });
+  await check('the banner names the date being logged to', async () =>
+    (await page.textContent('.card.backfilling')).includes('will be saved to'));
+  await shot('03b-backfill');
+
+  await page.click('button:has-text("Full Body B")');
+  await page.waitForSelector('.exercise');
+  await check('the session carries the backfill date, not today', async () =>
+    (await page.locator('input[type="date"]').first().inputValue()) === pastDate);
+
+  const backfillCard = page.locator('.exercise').first();
+  await backfillCard.locator('.stepper input').first().fill('8');
+  await page.click('button:has-text("Finish session")');
+  await page.waitForSelector('text=Logged under', { timeout: 10000 });
+  await check('it saved to the past date', async () =>
+    (await page.textContent('body')).includes(new Date(`${pastDate}T12:00:00`).getFullYear().toString()));
+
+  await page.click('a[data-tab="today"]');
+  await page.waitForSelector('input[aria-label="Date to log against"]', { timeout: 10000 });
+  await check('the date stays set for the next session in the run', async () =>
+    (await page.locator('input[aria-label="Date to log against"]').inputValue()) === pastDate);
+
+  await page.click('button:has-text("Back to today")');
+  await page.waitForTimeout(300);
+  await check('"Back to today" clears the backfill mode', async () =>
+    (await page.locator('.card.backfilling').count()) === 0);
+
   // ---- history
   step('History');
   await page.click('a[data-tab="history"]');

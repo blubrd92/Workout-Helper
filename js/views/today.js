@@ -48,7 +48,23 @@ function clearDraft() {
   try { localStorage.removeItem(draftKey()); } catch { /* see above */ }
 }
 
-export async function render(root, params, { navigate }) {
+/**
+ * The date new sessions are logged against. null means today.
+ *
+ * Deliberately a module variable rather than stored state: it survives moving
+ * around the app, so catching up a week of paper logs means setting the date once
+ * and entering several sessions in a row — but it resets on reload, so a forgotten
+ * backfill date cannot quietly swallow next week's training.
+ *
+ * Three things make the current date impossible to miss while it is not today: the
+ * banner on the session picker, the date field on the session itself, and the
+ * confirmation toast naming the date it saved to.
+ */
+let loggingDate = null;
+
+const activeDate = () => loggingDate || todayISO();
+
+export async function render(root, params, { navigate, rerender }) {
   const settings = await store.getSettings();
   const editingId = params[0] || null;
 
@@ -75,9 +91,10 @@ export async function render(root, params, { navigate }) {
   }
 
   const draft = loadDraft();
-  // A draft from a previous day is almost always an abandoned session rather than
-  // one still in progress, so it is offered rather than resumed silently.
-  if (draft && draft.date === todayISO() && draft.planId === plan.id) {
+  // A draft for some other day is almost always an abandoned session rather than
+  // one still in progress, so it is offered rather than resumed silently. When a
+  // backfill date is set, that date is the one being worked on.
+  if (draft && draft.date === activeDate() && draft.planId === plan.id) {
     await renderLogger(root, { draft, settings, navigate });
     return;
   }
@@ -106,7 +123,7 @@ export async function render(root, params, { navigate }) {
     );
   }
 
-  renderSessionPicker(root, { plan, settings, navigate });
+  renderSessionPicker(root, { plan, settings, navigate, rerender });
 }
 
 function countLogged(session) {
@@ -115,8 +132,9 @@ function countLogged(session) {
 
 // ---------------------------------------------------------------- picker
 
-function renderSessionPicker(root, { plan, settings, navigate }) {
+function renderSessionPicker(root, { plan, settings, navigate, rerender }) {
   add(root,
+    renderDateCard(rerender),
     sectionTitle('Pick a session'),
     el('div', { class: 'card' }, [
       el('p', { class: 'small muted' }, `${plan.name} · effective ${plan.effective}`),
@@ -143,9 +161,49 @@ function renderSessionPicker(root, { plan, settings, navigate }) {
   );
 }
 
+/**
+ * The date control on the session picker.
+ *
+ * Collapsed to a single line while the date is today, which is the normal case and
+ * should stay out of the way. Once it is any other date it becomes a banner that
+ * cannot be mistaken for chrome, with a one-tap way back to today.
+ */
+function renderDateCard(rerender) {
+  const backfilling = activeDate() !== todayISO();
+
+  const input = el('input', {
+    type: 'date',
+    value: activeDate(),
+    'aria-label': 'Date to log against',
+    onchange: () => {
+      if (!isValidISO(input.value)) { input.value = activeDate(); return; }
+      loggingDate = input.value === todayISO() ? null : input.value;
+      rerender();
+    },
+  });
+
+  return el('div', { class: `card${backfilling ? ' backfilling' : ''}` }, [
+    el('div', { class: 'row gap between' }, [
+      el('span', { class: 'small muted nowrap' }, backfilling ? 'Logging for' : 'Date'),
+      el('div', { class: 'grow' }, input),
+    ]),
+    backfilling
+      ? el('div', { style: { marginTop: '.7rem' } }, [
+        el('p', { class: 'small', style: { margin: '0 0 .6rem' } },
+          `Sessions you finish will be saved to ${formatDate(activeDate())}. The date stays set so you can enter several in a row.`),
+        el('button', {
+          class: 'btn small',
+          type: 'button',
+          onclick: () => { loggingDate = null; rerender(); },
+        }, 'Back to today'),
+      ])
+      : null,
+  ]);
+}
+
 function newDraft(plan, session, settings) {
   return {
-    date: todayISO(),
+    date: activeDate(),
     planId: plan.id,
     planName: plan.name,
     sessionName: session.name,
@@ -302,7 +360,7 @@ function renderExerciseCard(exercise, { persist, lastLoads }) {
   const loadInput = el('input', {
     type: 'text',
     value: exercise.load || '',
-    placeholder: 'e.g. KB 20 (handle + 6s), chair height',
+    placeholder: 'e.g. KB 20, chair height',
     'aria-label': `Load for ${exercise.name}`,
     oninput: () => { exercise.load = loadInput.value; persist(); },
   });
@@ -364,6 +422,10 @@ function renderExerciseCard(exercise, { persist, lastLoads }) {
     ]),
     field('Load', loadInput),
     lastChip ? el('div', { class: 'chips', style: { marginTop: '-.4rem', marginBottom: '.6rem' } }, [lastChip]) : null,
+    // Said once per exercise rather than once per set: with three sets and two
+    // sides that caption was repeating six times down a single card.
+    el('p', { class: 'sets-caption' },
+      `Sets — ${exercise.type === 'seconds' ? 'seconds' : 'reps'}, then reps left in the tank`),
     setsWrap,
     exercise.cues ? el('p', { class: 'cues' }, exercise.cues) : null,
     exercise.video && /^https?:\/\//i.test(exercise.video)
@@ -397,7 +459,6 @@ function renderSetRows(exercise, entry, index, persist) {
       }),
       el('span', { class: 'small faint' }, exercise.type === 'seconds' ? 'sec' : 'reps'),
       el('div', { class: 'tank' }, [
-        el('div', { class: 'tank-label' }, 'Reps left in the tank'),
         tankSelector({
           tank: side.tank,
           plus: side.plus,
@@ -422,7 +483,10 @@ function renderFooter(session, { persist, editing, navigate }) {
 
     const saved = await store.saveSession(session);
     if (!editing) clearDraft();
-    toast(editing ? 'Session updated.' : 'Session saved.');
+    // Name the date whenever it is not today, so a session saved into the past is
+    // always confirmed as such rather than silently filed away.
+    const when = session.date === todayISO() ? '' : ` to ${formatDate(session.date)}`;
+    toast(`${editing ? 'Session updated' : 'Session saved'}${when}.`);
     navigate(`#/history/${saved.id}`);
   });
 
