@@ -115,7 +115,8 @@ function renderCalendar(sessions, settings, navigate, repaint) {
       onclick: daySessions.length ? () => navigate(`#/history/${daySessions[0].id}`) : null,
     }, [
       el('span', {}, String(d)),
-      ...daySessions.slice(0, 3).map((s) => el('span', { class: `cal-dot${s.fallback ? ' fallback' : ''}` })),
+      // Every logged session gets the same dot. A short day is a session.
+      ...daySessions.slice(0, 3).map(() => el('span', { class: 'cal-dot' })),
     ]);
     grid.append(cell);
   }

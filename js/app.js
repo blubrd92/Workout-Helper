@@ -12,6 +12,16 @@
  */
 
 import { $, el, clear, toast } from './util.js';
+import { HOUSE } from './config.js';
+
+/**
+ * The house color is defined once, in js/config.js, and pushed into CSS here so
+ * there is exactly one place to change it. styles.css derives its border and wash
+ * shades from this value's intent, not its literal text, so those two stay
+ * hand-tuned alongside it.
+ */
+document.documentElement.style.setProperty('--house', HOUSE);
+document.querySelector('meta[name="theme-color"]')?.setAttribute('content', HOUSE);
 
 const boot = $('#boot');
 const signedOut = $('#signed-out');

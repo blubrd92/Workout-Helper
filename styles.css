@@ -495,9 +495,12 @@ input[type="checkbox"] { width: 24px; height: 24px; flex: 0 0 auto; accent-color
 */
 .cal-cell.planned { border-color: var(--house-edge); border-style: dashed; }
 .cal-cell.today { background: var(--house-wash); font-weight: 650; color: var(--ink); }
-/* Also used in the legend below the grid, so not scoped to .cal-cell. */
+/*
+  Also used in the legend below the grid, so not scoped to .cal-cell.
+  There is deliberately no variant for fallback ("short day") sessions: they count
+  exactly like full ones, and a dimmer dot would be reduced-credit styling.
+*/
 .cal-dot { width: .5rem; height: .5rem; border-radius: 50%; background: var(--ink); flex: 0 0 auto; }
-.cal-dot.fallback { background: var(--muted); }
 .cal-legend { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .7rem; font-size: .75rem; color: var(--faint); }
 .cal-legend span { display: inline-flex; align-items: center; gap: .3rem; }
 .legend-box { width: .8rem; height: .8rem; border-radius: 4px; border: 1px dashed var(--house-edge); }
