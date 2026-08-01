@@ -1,0 +1,12 @@
+{
+  "//": "Config for the Firebase CLI. The app itself is static files with no build step; this file only tells `firebase deploy` where the rules and indexes live, and points the emulators at them for local rules testing (see tests/rules/).",
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "firestore": { "port": 8080 },
+    "auth": { "port": 9099 },
+    "ui": { "enabled": true }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "//": [
+    "Composite indexes required by Ledger.",
+    "",
+    "Firestore builds single-field indexes automatically, so almost every query in",
+    "this app needs nothing here. The exception is the per-exercise progression",
+    "view, which combines an array-contains filter with an ordering on a different",
+    "field — that combination always needs a composite index.",
+    "",
+    "Deploy with:  firebase deploy --only firestore:indexes",
+    "Or let Firestore ask: the first time the progression view runs without this",
+    "index, the browser console shows an error containing a one-click link that",
+    "creates exactly this index. Either route works. See SETUP.md.",
+    "",
+    "The collection group is 'sessions', which matches users/{uid}/sessions for",
+    "every user."
+  ],
+  "indexes": [
+    {
+      "collectionGroup": "sessions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "exerciseKeys", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "date", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
+}
