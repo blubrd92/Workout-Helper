@@ -1,0 +1,11 @@
+{
+  "name": "ledger",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Ledger — personal training and nutrition tracker. The app itself is static files with no build step; this manifest exists only so Node treats the .js files in tools/ and tests/ as ES modules.",
+  "scripts": {
+    "test": "node tests/run.mjs",
+    "build-food-data": "node tools/build-common-foods.js"
+  }
+}
