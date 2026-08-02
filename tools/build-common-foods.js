@@ -67,23 +67,35 @@ export const MAX_RECORDS = 2500;
  * If you tighten the filters and a sentinel disappears, the job fails and tells
  * you which one. Add to this list freely — anything you would be annoyed to find
  * missing belongs here.
+ *
+ * Keep the matchers LOOSE. The first version asked for /^cereals?,? .*oats/ and
+ * failed a perfectly good run, because USDA files rolled oats under Foundation as
+ * "Oats, whole grain, rolled, old fashioned" with no "Cereals," prefix at all.
+ * A sentinel is asking "is there something oat-like in here", not "does this exact
+ * phrasing exist" — anchoring one to a spelling makes it a tripwire for USDA's
+ * naming rather than for our own filtering.
  */
 export const SENTINELS = [
   ['chicken breast', /chicken.*breast/i],
-  ['egg', /^eggs?, whole/i],
-  ['rolled oats', /^cereals?,? .*oats/i],
-  ['white rice', /^rice, white/i],
-  ['brown rice', /^rice, brown/i],
-  ['lentils', /^lentils/i],
-  ['milk', /^milk,/i],
+  ['egg', /\beggs?\b/i],   // \begg\b misses the plural; \begg alone matches eggplant
+  ['oats', /\boat/i],
+  ['white rice', /rice.*white|white rice/i],
+  ['brown rice', /rice.*brown|brown rice/i],
+  ['lentils', /lentil/i],
+  ['milk', /\bmilk\b/i],
   ['salmon', /salmon/i],
-  ['ground beef', /^beef, ground/i],
-  ['potato', /^potatoes/i],
-  ['broccoli', /^broccoli/i],
-  ['banana', /^bananas/i],
+  ['ground beef', /beef.*ground|ground beef/i],
+  ['potato', /potato/i],
+  ['broccoli', /broccoli/i],
+  ['banana', /banana/i],
   ['peanut butter', /peanut butter/i],
   ['yogurt', /yogurt/i],
 ];
+
+/** Does this description look like one of the staples above? */
+function isSentinel(name) {
+  return SENTINELS.some(([, matcher]) => matcher.test(name));
+}
 
 const PAGE_SIZE = 200;      // /foods/list maximum
 const DETAIL_CHUNK = 20;    // /foods maximum ids per request
@@ -312,6 +324,16 @@ export function isExcluded(description) {
  */
 export function stapleScore(food, name) {
   let score = 0;
+  /*
+    A staple is never a candidate for the cap.
+
+    Ranking alone is a heuristic, and a heuristic will eventually rank something
+    basic below 2500 other things — "Cereals, oats, regular and quick, not
+    fortified, dry" carries four commas and scores badly for it. Rather than hope
+    the heuristic behaves, put anything matching a sentinel out of reach of the cut
+    entirely. The check at the end then only has to catch filtering mistakes.
+  */
+  if (isSentinel(name)) score += 10000;
   if (food.dataType === 'Foundation') score += 50;      // newer, cleaner analyses
   score -= (name.match(/,/g) || []).length * 6;         // each clause is more specific
   score -= name.length / 12;                            // and shorter is more generic

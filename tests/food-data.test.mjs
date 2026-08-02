@@ -125,6 +125,27 @@ test('staples survive when the candidate list exceeds the cap', () => {
   }
 });
 
+test('a staple survives the cap even when it scores badly on its own', () => {
+  // The run that failed on this: "Cereals, oats, regular and quick, not fortified,
+  // dry" carries four commas and ranks poorly, so the heuristic alone would cut it.
+  // Sentinel foods are lifted out of reach of the cap entirely.
+  const awkward = rec('Cereals, oats, regular and quick, not fortified, dry',
+    stapleScore({}, 'Cereals, oats, regular and quick, not fortified, dry'));
+  const result = finalize([...filler(MAX_RECORDS + 2000), ...staples(), awkward]);
+  ok(result.some((r) => /oats, regular and quick/i.test(r.name)),
+    'the awkwardly-named oats record should have been protected');
+});
+
+test('sentinel matchers are loose enough for USDA renaming', () => {
+  // Foundation calls rolled oats "Oats, whole grain, rolled, old fashioned" — no
+  // "Cereals," prefix. An anchored matcher failed a good run over exactly this.
+  const foundationOats = [
+    rec('Oats, whole grain, rolled, old fashioned'),
+    ...staples().filter((r) => !/oat/i.test(r.name)),
+  ];
+  finalize([...filler(600), ...foundationOats]);  // throws if the matcher is too strict
+});
+
 test('the cap is still applied', () => {
   const result = finalize([...filler(MAX_RECORDS + 1000), ...staples()]);
   ok(result.length === MAX_RECORDS, `expected ${MAX_RECORDS}, got ${result.length}`);
