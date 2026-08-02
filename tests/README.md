@@ -1,12 +1,15 @@
 # Tests
 
-Three suites, none of which needs a Firebase project. Run them from the repo root.
+Four suites, none of which needs a Firebase project. Run them from the repo root.
 
 | Suite | Command | Needs |
 |---|---|---|
 | Plan parser | `npm test` | Node only |
+| Food dataset generator | `npm test` | Node only |
 | Browser smoke test | `node tests/browser/smoke.mjs` | a global Playwright install |
 | Security rules | see below | Firebase CLI + a JDK |
+
+`npm test` runs the two Node suites.
 
 ---
 
@@ -19,7 +22,26 @@ server, not `file://`).
 
 **Status: passing.**
 
-## 2. Browser smoke test — `node tests/browser/smoke.mjs`
+## 2. Food dataset generator — `node tests/food-data.test.mjs`
+
+12 tests over the filtering and selection logic in
+`tools/build-common-foods.js`. No network — they run against the pure functions.
+
+These exist because of a specific failure. The generator ran cleanly, reported
+success, committed 4,000 records, and produced a file containing no rice,
+lentils, milk, salmon or yogurt: it sorted alphabetically and *then* applied the
+record cap, keeping A–I and dropping the rest. Nothing failed, because nothing
+checked what was in the file — only how much.
+
+So the suite covers what the counting rails could not: that exclusions catch what
+they claim to (`Babyfood` is one word in USDA data, and the original pattern
+matched none of them), and that staples survive when the candidate list exceeds
+the cap. The generator itself now carries a sentinel list — if chicken breast or
+lentils are missing from a result, the job fails and names what went missing.
+
+**Status: passing.**
+
+## 3. Browser smoke test — `node tests/browser/smoke.mjs`
 
 Drives the real app in Chromium at a 390px viewport, with Firebase's CDN modules
 swapped for the in-memory stubs in `tests/browser/firebase-stub/`. It walks the
@@ -41,9 +63,9 @@ The stubs are a test double, not an emulator. They do not enforce security rules
 so this suite says nothing about whether `firestore.rules` is correct. That is
 what suite 3 is for.
 
-**Status: passing (30 checks).**
+**Status: passing (55 checks).**
 
-## 3. Security rules — `tests/rules/rules.test.mjs`
+## 4. Security rules — `tests/rules/rules.test.mjs`
 
 ```
 npm install --no-save @firebase/rules-unit-testing

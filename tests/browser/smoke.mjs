@@ -470,6 +470,32 @@ async function run(page, shot) {
     if (heights.some((h) => h < 844)) throw new Error(`heights: ${heights.join(', ')}`);
     return true;
   });
+  await check('screens appear in one piece, not in stages', async () => {
+    // Settings and Progress both read from Firestore. They used to append each
+    // card as its own await resolved, so the page built itself in visible stages
+    // and shoved content down after it was already on screen.
+    // Wait on something unique to the destination — waiting on any .card matches
+    // the screen you are leaving, which are still on the page for a moment.
+    const marker = { settings: 'text=Daily targets', progress: 'text=Exercise progression' };
+    for (const tab of ['settings', 'progress']) {
+      await page.click('a[data-tab="today"]');
+      await page.waitForTimeout(250);
+      await page.click(`a[data-tab="${tab}"]`);
+      await page.waitForSelector(marker[tab], { timeout: 5000 });
+      const samples = [];
+      for (let i = 0; i < 8; i++) {
+        samples.push(await page.evaluate(() => document.querySelector('#view').scrollHeight));
+        await page.waitForTimeout(80);
+      }
+      // Once the first card is on screen the page must be complete: no second
+      // wave of content arriving and pushing everything down.
+      const settled = samples[samples.length - 1];
+      if (samples.some((h) => h !== settled)) {
+        throw new Error(`${tab} height changed after first paint: ${samples.join(' -> ')}`);
+      }
+    }
+    return true;
+  });
   await shot('10-tabbar');
 
   // ---- layout

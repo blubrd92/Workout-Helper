@@ -21,7 +21,7 @@
 
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const OUT_PATH = join(HERE, '..', 'data', 'common-foods.json');
@@ -53,7 +53,37 @@ const NUTRIENT_ENERGY_ATWATER_SPECIFIC = 2048;
  * every user and look like nothing happened.
  */
 const MIN_RECORDS = 500;
-const MAX_RECORDS = 4000;
+export const MAX_RECORDS = 2500;
+
+/**
+ * Staples that must survive filtering, as [label, matcher] pairs.
+ *
+ * This is the real safety rail. The first run of this script produced a file that
+ * passed every count check and was still useless: it sorted alphabetically before
+ * applying the record cap, so it kept A through I and silently dropped lentils,
+ * rice, milk, salmon, turkey and everything else past the cut. A count cannot
+ * catch that. Asking "is chicken breast in here?" can.
+ *
+ * If you tighten the filters and a sentinel disappears, the job fails and tells
+ * you which one. Add to this list freely — anything you would be annoyed to find
+ * missing belongs here.
+ */
+export const SENTINELS = [
+  ['chicken breast', /chicken.*breast/i],
+  ['egg', /^eggs?, whole/i],
+  ['rolled oats', /^cereals?,? .*oats/i],
+  ['white rice', /^rice, white/i],
+  ['brown rice', /^rice, brown/i],
+  ['lentils', /^lentils/i],
+  ['milk', /^milk,/i],
+  ['salmon', /salmon/i],
+  ['ground beef', /^beef, ground/i],
+  ['potato', /^potatoes/i],
+  ['broccoli', /^broccoli/i],
+  ['banana', /^bananas/i],
+  ['peanut butter', /peanut butter/i],
+  ['yogurt', /yogurt/i],
+];
 
 const PAGE_SIZE = 200;      // /foods/list maximum
 const DETAIL_CHUNK = 20;    // /foods maximum ids per request
@@ -68,6 +98,9 @@ const MAX_RETRIES = 4;
  * ends up in the file.
  */
 const EXCLUDE_PATTERNS = [
+  // USDA writes this as ONE word: "Babyfood, cereal, with egg yolks, junior".
+  // The old /\bbaby food\b/ matched none of them and 236 got through.
+  /babyfood/i,
   /\bbaby food\b/i,
   /\binfant formula\b/i,
   /^formulated bar/i,
@@ -79,7 +112,21 @@ const EXCLUDE_PATTERNS = [
   /\bpuerto rican\b/i,      /* regionally specific prepared dishes, not staples */
   /\bincluding USDA commodity\b/i,
   /\bunprepared\b/i,        /* dry mixes that are not eaten as-is */
+  /^alcoholic beverage/i,   /* a calorie log does not need 69 kinds of liqueur */
+  /\bdrink mix\b/i,
+  /\bnutritional supplement\b/i,
+  /\bmeal replacement\b/i,
 ];
+
+/**
+ * Brand names, which SR Legacy writes in capitals: "Beverages, drink mix, QUAKER
+ * OATS, GATORADE, orange flavor". Three or more capitals in a row is a reliable
+ * signal, and generic descriptions essentially never contain one.
+ *
+ * Packaged goods are explicitly out of scope for this app — they are faster typed
+ * into your own library once than searched for repeatedly.
+ */
+const BRAND_PATTERN = /\b[A-Z]{3,}\b/;
 
 async function main() {
   const apiKey = process.env.USDA_API_KEY;
@@ -104,23 +151,7 @@ async function main() {
     if (record) records.push(record);
   }
 
-  // Deduplicate by name. SR Legacy and Foundation overlap on some staples; the
-  // first one wins, and Foundation is listed first because its analyses are newer.
-  const seen = new Set();
-  const unique = [];
-  for (const record of records) {
-    const key = record.name.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    unique.push(record);
-  }
-
-  unique.sort((a, b) => a.name.localeCompare(b.name));
-  const final = unique.slice(0, MAX_RECORDS);
-
-  if (final.length < MIN_RECORDS) {
-    fail(`Only ${final.length} usable records (minimum ${MIN_RECORDS}). Refusing to overwrite the existing dataset with a truncated one.`);
-  }
+  const final = finalize(records);
 
   await mkdir(dirname(OUT_PATH), { recursive: true });
   // No pretty-printing: this file is downloaded by phones on a gym connection.
@@ -128,6 +159,62 @@ async function main() {
 
   const bytes = Buffer.byteLength(JSON.stringify(final));
   console.log(`\nWrote ${final.length} records to data/common-foods.json (${(bytes / 1024).toFixed(0)} KB).`);
+}
+
+/**
+ * Turn raw records into the final list, or throw explaining why not.
+ *
+ * Split out of main() so it can be tested without touching the network — the bug
+ * that shipped a useless dataset lived entirely in here, and was invisible because
+ * this logic only ever ran inside a live API call. tests/food-data.test.mjs covers
+ * it now.
+ */
+export function finalize(records) {
+  // Deduplicate by name. SR Legacy and Foundation overlap on some staples; the
+  // higher-scoring record wins, which prefers the Foundation analysis.
+  const byName = new Map();
+  for (const record of records) {
+    const key = record.name.toLowerCase();
+    const existing = byName.get(key);
+    if (!existing || record.score > existing.score) byName.set(key, record);
+  }
+  const unique = [...byName.values()];
+
+  /*
+    Applying the cap.
+
+    This MUST happen before the alphabetical sort, and must drop the least useful
+    records rather than the last ones by name. The first version sorted by name and
+    then sliced, which quietly threw away everything after "I".
+
+    The ranking is a staple heuristic: Foundation Foods are newer analyses and win
+    over SR Legacy; then fewer commas, because USDA descriptions get more specific
+    with each clause ("Beef, ground, 80% lean meat / 20% fat, patty, cooked,
+    pan-broiled" is five clauses deep and nobody logs it by name); then shorter
+    overall. It is crude, and it is meant to be adjusted.
+  */
+  const capped = [...unique].sort((a, b) => b.score - a.score).slice(0, MAX_RECORDS);
+
+  // Sort for output only, once the cap has already been applied.
+  const final = capped
+    .map(({ score, ...record }) => record)   // drop the internal ranking score
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (final.length < MIN_RECORDS) {
+    throw new Error(`Only ${final.length} usable records (minimum ${MIN_RECORDS}). Refusing to overwrite the existing dataset with a truncated one.`);
+  }
+
+  // The check that actually catches a bad run — see SENTINELS above.
+  const missing = SENTINELS.filter(([, matcher]) => !final.some((r) => matcher.test(r.name)));
+  if (missing.length) {
+    throw new Error(
+      `These staples are missing from the result: ${missing.map(([label]) => label).join(', ')}. `
+      + 'That means the filtering or the record cap threw away something basic. '
+      + 'Refusing to overwrite the existing dataset.',
+    );
+  }
+
+  return final;
 }
 
 // ---------------------------------------------------------------- fetching
@@ -213,9 +300,22 @@ function redact(url) {
 
 // ---------------------------------------------------------------- shaping
 
-function isExcluded(description) {
+export function isExcluded(description) {
   if (!description) return true;
+  if (BRAND_PATTERN.test(description)) return true;
   return EXCLUDE_PATTERNS.some((pattern) => pattern.test(description));
+}
+
+/**
+ * How staple-looking a description is. Higher wins when the cap is applied.
+ * See the note at the call site for why this exists.
+ */
+export function stapleScore(food, name) {
+  let score = 0;
+  if (food.dataType === 'Foundation') score += 50;      // newer, cleaner analyses
+  score -= (name.match(/,/g) || []).length * 6;         // each clause is more specific
+  score -= name.length / 12;                            // and shorter is more generic
+  return score;
 }
 
 /**
@@ -248,6 +348,8 @@ function toRecord(food) {
     serving: portion ? portion.label : '100 g',
     kcal: round(per100g.kcal * scale, 0),
     protein: round((per100g.protein ?? 0) * scale, 1),
+    // Used only to rank records when the cap is applied; stripped before writing.
+    score: stapleScore(food, name),
   };
 }
 
@@ -324,4 +426,9 @@ function fail(message) {
   process.exit(1);
 }
 
-main().catch((err) => fail(err.stack || err.message));
+// Run only when executed directly; importing this file (as the tests do) must not
+// kick off a fetch.
+const invokedDirectly = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (invokedDirectly) {
+  main().catch((err) => fail(err.stack || err.message));
+}

@@ -11,7 +11,7 @@ import * as store from '../store.js';
 import { planImportForm } from '../plan-import.js';
 import { buildBackup, backupFilename, buildCoachReport, reportFilename } from '../export.js';
 import {
-  toast, downloadFile, copyToClipboard, confirmDangerous, todayISO, addDays,
+  add, toast, downloadFile, copyToClipboard, confirmDangerous, todayISO, addDays,
   formatDate, isValidISO,
 } from '../util.js';
 import { DAY_NAMES } from '../config.js';
@@ -23,20 +23,37 @@ import {
 export const title = 'Settings';
 
 export async function render(root, params, { navigate, rerender }) {
-  const settings = await store.getSettings();
+  /*
+    Every read happens before anything is put on screen, and the whole page is
+    appended in one go.
 
-  root.append(await renderTargets(settings));
-  root.append(await renderTraining(settings));
-  root.append(await renderWatchItem(settings));
-  root.append(await renderPlans(navigate, rerender));
-  root.append(renderExport());
-  root.append(renderImport(rerender));
-  root.append(await renderAccount(navigate));
+    This used to append each card as its own await resolved, so the screen built
+    itself in two visible stages — the first three cards painted, then the plan
+    list arrived and shoved everything below it down. That is what made Settings
+    jump when the other tabs did not: it is the only screen that fetches after it
+    has already drawn something.
+  */
+  const [settings, plans, activePlan] = await Promise.all([
+    store.getSettings(),
+    store.listPlans(),
+    store.getActivePlan(),
+  ]);
+
+  add(
+    root,
+    renderTargets(settings),
+    renderTraining(settings),
+    renderWatchItem(settings),
+    renderPlans({ plans, activePlan, rerender }),
+    renderExport(),
+    renderImport(rerender),
+    renderAccount(navigate),
+  );
 }
 
 // ---------------------------------------------------------------- targets
 
-async function renderTargets(settings) {
+function renderTargets(settings) {
   const kcalInput = el('input', { type: 'number', inputmode: 'numeric', min: '0', value: settings.kcalTarget });
   const proteinInput = el('input', { type: 'number', inputmode: 'numeric', min: '0', value: settings.proteinTarget });
 
@@ -73,7 +90,7 @@ async function renderTargets(settings) {
 
 // ---------------------------------------------------------------- training days
 
-async function renderTraining(settings) {
+function renderTraining(settings) {
   let plannedDays = [...(settings.plannedDays || [])];
   let weekStart = settings.weekStart ?? 0;
 
@@ -108,7 +125,7 @@ async function renderTraining(settings) {
  * The watch item is whatever the user says it is. No body part is hardcoded
  * anywhere in this app, and the field does not exist until they name one.
  */
-async function renderWatchItem(settings) {
+function renderWatchItem(settings) {
   const labelInput = el('input', {
     type: 'text',
     value: settings.watchItem?.label || '',
@@ -140,9 +157,7 @@ async function renderWatchItem(settings) {
 
 // ---------------------------------------------------------------- plans
 
-async function renderPlans(navigate, rerender) {
-  const [plans, active] = await Promise.all([store.listPlans(), store.getActivePlan()]);
-
+function renderPlans({ plans, activePlan: active, rerender }) {
   const list = plans.length
     ? el('ul', { class: 'list' }, plans.map((plan) => el('li', {}, [
       el('div', { class: 'list-row' }, [
@@ -311,7 +326,7 @@ function renderImport(rerender) {
 
 // ---------------------------------------------------------------- account
 
-async function renderAccount(navigate) {
+function renderAccount(navigate) {
   const user = auth.currentUser;
 
   return el('div', {}, [

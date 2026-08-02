@@ -63,6 +63,14 @@
 */
 [hidden] { display: none !important; }
 
+/*
+  Reserve the scrollbar's width at all times. Settings is long enough to scroll and
+  most other screens are not, so moving between them made a desktop scrollbar
+  appear and disappear — which changes the viewport width and shifts the entire
+  layout sideways. Phones use overlay scrollbars and never saw this one.
+*/
+html { scrollbar-gutter: stable; }
+
 html, body {
   margin: 0;
   padding: 0;

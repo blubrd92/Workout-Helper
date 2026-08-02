@@ -144,13 +144,25 @@ async function render() {
   const token = ++renderToken;
 
   markActiveTab(name);
-  clear(viewRoot, el('p', { class: 'empty' }, 'Loading…'));
+
+  /*
+    Hold the placeholder back for a moment.
+
+    Reads are usually served from Firestore's local cache and land in a few
+    milliseconds, so painting "Loading…" immediately meant every tab switch flashed
+    a near-empty screen and then jumped to full height. Waiting ~150ms means a fast
+    switch never shows it at all, while a genuinely slow one still gets feedback.
+  */
+  const placeholder = setTimeout(() => {
+    if (token === renderToken) clear(viewRoot, el('p', { class: 'empty' }, 'Loading…'));
+  }, 150);
 
   try {
     const view = await ROUTES[name]();
     if (token !== renderToken) return; // a newer navigation won the race
 
     viewTitle.textContent = view.title || 'Ledger';
+    clearTimeout(placeholder);
     clear(viewRoot);
     await view.render(viewRoot, params, { navigate, rerender: render });
     // The window scrolls, not #view — so scroll the window. This used to set
@@ -159,6 +171,7 @@ async function render() {
     if (token === renderToken) window.scrollTo(0, 0);
   } catch (err) {
     console.error(err);
+    clearTimeout(placeholder);
     if (token !== renderToken) return;
     clear(viewRoot, [
       el('div', { class: 'card' }, [

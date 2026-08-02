@@ -15,7 +15,7 @@ import * as store from '../store.js';
 import { describeSets } from '../sets.js';
 import { exerciseKey } from '../plan-parser.js';
 import {
-  todayISO, addDays, formatDate, startOfWeek, num, sumBy,
+  todayISO, addDays, formatDate, startOfWeek, num, sumBy, add,
 } from '../util.js';
 
 export const title = 'Progress';
@@ -25,20 +25,21 @@ export const title = 'Progress';
 let selectedExercise = null;
 
 export async function render(root) {
+  // Both sections are built before either is shown, for the same reason Settings
+  // is: appending a section that is still loading means the page grows under the
+  // reader's thumb a moment after it appears.
   const settings = await store.getSettings();
-
-  root.append(sectionTitle('Exercise progression'));
   const exerciseSection = el('div');
-  root.append(exerciseSection);
-
-  root.append(sectionTitle('Weight'));
   const weightSection = el('div');
-  root.append(weightSection);
 
   await Promise.all([
     renderExerciseSection(exerciseSection),
     renderWeightSection(weightSection, settings),
   ]);
+
+  add(root,
+    sectionTitle('Exercise progression'), exerciseSection,
+    sectionTitle('Weight'), weightSection);
 }
 
 // ---------------------------------------------------------------- exercises
