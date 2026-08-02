@@ -159,6 +159,8 @@ test('prefers a household measure over whatever came first', () => {
 console.log('\nSearch ranking');
 
 const catalogue = [
+  { name: 'Potatoes, baked, flesh and skin, with salt' },
+  { name: 'Potato pancakes' },
   { name: 'Chicken, broilers or fryers, breast, meat only, cooked, roasted' },
   { name: 'Chicken breast tenders, breaded, uncooked' },
   { name: 'Rice, white, long-grain, regular, enriched, cooked' },
@@ -194,6 +196,13 @@ test('derivative products rank last', () => {
   const names = searchLibrary('rice', catalogue).map((f) => f.name);
   ok(names.indexOf('Rice crackers') > names.findIndex((n) => /^Rice, white/.test(n)),
     'crackers should trail actual rice');
+});
+
+test('a singular query matches a plural head noun', () => {
+  // "potato" scored as a partial match against "Potatoes, baked" and lost to
+  // "Potato pancakes", which matched the singular exactly. USDA pluralises the way
+  // English does, so the word test has to as well.
+  ok(/^Potatoes, baked/.test(top('potato')), `"potato" returned ${top('potato')}`);
 });
 
 test('a query matching nothing returns nothing', () => {

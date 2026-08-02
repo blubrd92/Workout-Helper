@@ -109,7 +109,7 @@ function scoreMatch(lcName, query, tokens) {
 
   const head = lcName.split(',')[0].trim();
   let score;
-  if (head === query || head === `${query}s` || `${head}s` === query) score = 0;
+  if (sameWord(head, query)) score = 0;
   else if (head.startsWith(query)) score = 200;
   else if (lcName.startsWith(query)) score = 300;
   else score = 400;
@@ -118,6 +118,19 @@ function scoreMatch(lcName, query, tokens) {
   else if (partialWord) score += 250;
   if (DERIVATIVE.test(lcName)) score += 600;
   return score + lcName.length / 200;
+}
+
+/**
+ * Are these the same word, allowing for a plural on either side?
+ *
+ * Only the +s form was handled at first, which meant "potato" did not match the
+ * head noun "potatoes" and lost to "Potato pancakes". USDA pluralises the way
+ * English does — potatoes, tomatoes, berries — so +es and y->ies count too.
+ */
+function sameWord(a, b) {
+  if (a === b) return true;
+  const forms = (word) => [word, `${word}s`, `${word}es`, word.replace(/y$/, 'ies')];
+  return forms(a).includes(b) || forms(b).includes(a);
 }
 
 /** Escape a user-typed token for use in a RegExp. */
@@ -129,7 +142,11 @@ function rank(items, query, nameOf) {
   // Boundary patterns are built once per query, not once per candidate.
   const tokens = query.split(/\s+/).filter(Boolean).map((text) => ({
     text,
-    whole: new RegExp(`\\b${escapeRe(text)}\\b`),
+    // The whole-word test has to tolerate a plural, or typing "potato" scores as a
+    // partial match against "Potatoes, baked" and loses to "Potato pancakes",
+    // which matches the singular exactly. Same shape as sameWord() above.
+    whole: new RegExp(`\\b(?:${escapeRe(text)}(?:s|es)?${
+      text.endsWith('y') ? `|${escapeRe(text.slice(0, -1))}ies` : ''})\\b`),
     prefix: new RegExp(`\\b${escapeRe(text)}`),
   }));
   const scored = [];
