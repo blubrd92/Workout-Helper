@@ -7,9 +7,13 @@
  * library must not either. Once fetched it stays in memory for the session, and
  * the browser cache handles repeat visits.
  *
- * Search is case-insensitive substring matching. No index, no search library, no
- * server call — with a few thousand short strings this is a fraction of a frame on
+ * Search is case-insensitive and client-side: no index, no search library, no
+ * server call. With a few thousand short strings this is a fraction of a frame on
  * a phone, and it works offline like everything else.
+ *
+ * It matches on query WORDS rather than one literal run of characters, which is a
+ * small step beyond plain substring matching and the only way "chicken breast"
+ * finds "Chicken, broilers or fryers, breast, meat only, cooked, roasted".
  */
 
 import { COMMON_FOODS_URL, FOOD_SEARCH_LIMIT } from './config.js';
@@ -62,17 +66,76 @@ export function commonStatus() {
 }
 
 /**
- * Rank matches within one list.
- * A name that starts with the query beats one that merely contains it, and shorter
- * names beat longer ones — "Egg" should outrank "Egg substitute, liquid".
+ * Words marking a derivative product rather than the food itself.
+ * Mirrors the list in tools/build-common-foods.js — the generator demotes these
+ * when choosing what to ship, and search demotes whatever still gets through.
  */
-function rank(items, needle, nameOf) {
+const DERIVATIVE = /\b(breaded|batter|battered|nuggets?|patty|patties|rolls?|dried|dehydrated|powdered?|flour|bran|instant|imitation|substitute|candied|sweetened|crackers?|chips?|puffs?|sticks?|paste|extract|concentrate)\b/i;
+
+/**
+ * Score one name against a query. Lower is better; null means no match.
+ *
+ * Two things this has to cope with, both consequences of USDA naming:
+ *
+ * 1. The words you type are often split across clauses. "chicken breast" appears
+ *    in "Chicken, broilers or fryers, breast, meat only, cooked, roasted" but not
+ *    adjacently, so a plain substring test finds nothing. Every query WORD must
+ *    appear, rather than the query as one run of characters.
+ *
+ * 2. Derivative products have shorter names than the foods they derive from, so
+ *    ranking on brevity puts them first: "rice" returned Rice crackers, Rice bran
+ *    and Rice flour ahead of rice, and "egg" returned Eggnog and Eggplant ahead of
+ *    eggs. What actually distinguishes them is the first comma-clause — the head
+ *    noun. "Rice, white, long-grain" has a head of "rice"; "Rice crackers" does not.
+ *
+ * So: head-noun match first, then any-prefix, then words-anywhere, with a heavy
+ * penalty for derivative forms and length only as a tie-break.
+ */
+function scoreMatch(lcName, query, tokens) {
+  let midWord = false;
+  let partialWord = false;
+  for (const { text, whole, prefix } of tokens) {
+    if (!lcName.includes(text)) return null;
+    // Three strengths of match, and the difference matters more than it looks:
+    //   whole word   "salmon" in "Fish, salmon, Atlantic"   — the food itself
+    //   word prefix  "salmon" in "Salmonberries"            — a different food
+    //   mid-word     "oats"   in "Buckwheat groats"         — a coincidence
+    // Weaker matches still count, they just go to the back.
+    if (!whole.test(lcName)) {
+      if (prefix.test(lcName)) partialWord = true;
+      else midWord = true;
+    }
+  }
+
+  const head = lcName.split(',')[0].trim();
+  let score;
+  if (head === query || head === `${query}s` || `${head}s` === query) score = 0;
+  else if (head.startsWith(query)) score = 200;
+  else if (lcName.startsWith(query)) score = 300;
+  else score = 400;
+
+  if (midWord) score += 800;
+  else if (partialWord) score += 250;
+  if (DERIVATIVE.test(lcName)) score += 600;
+  return score + lcName.length / 200;
+}
+
+/** Escape a user-typed token for use in a RegExp. */
+function escapeRe(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function rank(items, query, nameOf) {
+  // Boundary patterns are built once per query, not once per candidate.
+  const tokens = query.split(/\s+/).filter(Boolean).map((text) => ({
+    text,
+    whole: new RegExp(`\\b${escapeRe(text)}\\b`),
+    prefix: new RegExp(`\\b${escapeRe(text)}`),
+  }));
   const scored = [];
   for (const item of items) {
-    const name = nameOf(item);
-    const at = name.indexOf(needle);
-    if (at === -1) continue;
-    scored.push({ item, score: (at === 0 ? 0 : 1000) + at + name.length / 100 });
+    const score = scoreMatch(nameOf(item), query, tokens);
+    if (score !== null) scored.push({ item, score });
   }
   scored.sort((a, b) => a.score - b.score);
   return scored.map((s) => s.item);

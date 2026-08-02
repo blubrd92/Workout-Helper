@@ -24,8 +24,9 @@ server, not `file://`).
 
 ## 2. Food dataset generator — `node tests/food-data.test.mjs`
 
-12 tests over the filtering and selection logic in
-`tools/build-common-foods.js`. No network — they run against the pure functions.
+23 tests over the food dataset: the generator's filtering, ranking and portion
+logic in `tools/build-common-foods.js`, and the search ranking in `js/foods.js`.
+No network — they run against the pure functions.
 
 These exist because of a specific failure. The generator ran cleanly, reported
 success, committed 4,000 records, and produced a file containing no rice,
@@ -35,9 +36,19 @@ checked what was in the file — only how much.
 
 So the suite covers what the counting rails could not: that exclusions catch what
 they claim to (`Babyfood` is one word in USDA data, and the original pattern
-matched none of them), and that staples survive when the candidate list exceeds
-the cap. The generator itself now carries a sentinel list — if chicken breast or
-lentils are missing from a result, the job fails and names what went missing.
+matched none of them), that staples survive when the candidate list exceeds the
+cap, and that the food outranks the product made from it — a later run shipped
+Rice crackers and Rice bran while cutting rice, because the ranking rewarded
+short names and USDA's canonical staples are the long ones.
+
+Search ranking is covered here too, for the same reason: `rice` used to return
+crackers, `egg` returned Eggnog and Eggplant, and `chicken breast` matched
+nothing at all, because the words are split across clauses in
+`Chicken, broilers or fryers, breast, meat only, cooked, roasted`.
+
+The generator carries a sentinel list — staples the result must contain **in
+plain form**. Breaded chicken tenders do not satisfy "chicken breast"; that
+loophole is exactly how one bad file passed.
 
 **Status: passing.**
 

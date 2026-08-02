@@ -13,7 +13,8 @@
  * lived.
  */
 
-import { finalize, isExcluded, stapleScore, MAX_RECORDS } from '../tools/build-common-foods.js';
+import { finalize, isExcluded, stapleScore, pickPortion, MAX_RECORDS } from '../tools/build-common-foods.js';
+import { searchLibrary } from '../js/foods.js';
 
 let passed = 0;
 let failed = 0;
@@ -104,10 +105,99 @@ test('Foundation analyses outrank SR Legacy', () => {
     'Foundation should score higher');
 });
 
-test('plainer descriptions outrank more specific ones', () => {
-  const plain = stapleScore({}, 'Beef, ground, cooked');
-  const specific = stapleScore({}, 'Beef, ground, 80% lean meat / 20% fat, patty, cooked, pan-broiled');
-  ok(plain > specific, `plain ${plain} should beat specific ${specific}`);
+test('the food outranks the product made from it', () => {
+  // An earlier version subtracted points per comma, which is exactly backwards for
+  // USDA: the canonical staples are the long five-clause descriptions, and the
+  // short names belong to products. That scoring kept Rice crackers and cut rice.
+  const pairs = [
+    ['Chicken, broilers or fryers, breast, meat only, cooked, roasted', 'Chicken breast, roll, oven-roasted'],
+    ['Rice, white, long-grain, regular, enriched, cooked', 'Rice crackers'],
+    ['Oats, whole grain, rolled, old fashioned', 'Rice flour, brown'],
+  ];
+  for (const [food, product] of pairs) {
+    ok(stapleScore({}, food) > stapleScore({}, product),
+      `"${food}" should outrank "${product}"`);
+  }
+});
+
+test('a staple is only a sentinel in its plain form', () => {
+  // The run that shipped: the sentinel matched "Chicken breast tenders, breaded"
+  // and passed, while the actual chicken breast was missing from the file.
+  const withOnlyProcessed = [
+    ...staples().filter((r) => !/chicken/i.test(r.name)),
+    rec('Chicken breast tenders, breaded, uncooked'),
+    rec('Chicken breast, roll, oven-roasted'),
+  ];
+  throws(() => finalize([...filler(600), ...withOnlyProcessed]), /chicken breast/,
+    'processed variants must not satisfy the staple check');
+});
+
+console.log('\nPortion labels');
+
+test('rejects USDA measurement jargon as a serving label', () => {
+  // 197 records shipped saying "1 RACC" — Reference Amount Customarily Consumed.
+  ok(pickPortion({ foodPortions: [{ gramWeight: 40, amount: 1, measureUnit: { name: 'RACC' } }] }) === null,
+    'RACC should fall back to 100 g');
+  ok(pickPortion({ foodPortions: [{ gramWeight: 40, amount: 1, measureUnit: { name: 'serving' } }] }) === null,
+    '"1 serving" says nothing');
+});
+
+test('a zero amount becomes one', () => {
+  // USDA reports amount 0 on some portions, which produced "0 breast, bone removed".
+  const p = pickPortion({ foodPortions: [{ gramWeight: 120, amount: 0, measureUnit: { name: 'breast' } }] });
+  ok(p && p.label === '1 breast', `got ${p && p.label}`);
+});
+
+test('prefers a household measure over whatever came first', () => {
+  const p = pickPortion({ foodPortions: [
+    { gramWeight: 100, amount: 1, measureUnit: { name: 'RACC' } },
+    { gramWeight: 158, amount: 1, measureUnit: { name: 'cup' } },
+  ] });
+  ok(p && p.label === '1 cup', `got ${p && p.label}`);
+});
+
+console.log('\nSearch ranking');
+
+const catalogue = [
+  { name: 'Chicken, broilers or fryers, breast, meat only, cooked, roasted' },
+  { name: 'Chicken breast tenders, breaded, uncooked' },
+  { name: 'Rice, white, long-grain, regular, enriched, cooked' },
+  { name: 'Rice crackers' },
+  { name: 'Rice bran, crude' },
+  { name: 'Eggs, whole, raw, fresh' },
+  { name: 'Eggnog' },
+  { name: 'Eggplant, raw' },
+  { name: 'Oats, whole grain, rolled, old fashioned' },
+  { name: 'Buckwheat groats, roasted, dry' },
+  { name: 'Fish, salmon, Atlantic, farmed, cooked, dry heat' },
+  { name: 'Salmonberries, raw (Alaska Native)' },
+];
+const top = (q) => searchLibrary(q, catalogue)[0]?.name;
+
+test('the head noun wins over a product sharing its prefix', () => {
+  ok(/^Rice, white/.test(top('rice')), `"rice" returned ${top('rice')}`);
+  ok(/^Eggs, whole/.test(top('egg')), `"egg" returned ${top('egg')}`);
+});
+
+test('words may be split across clauses', () => {
+  // "chicken breast" is not one run of characters in the canonical description.
+  ok(/broilers or fryers/.test(top('chicken breast')),
+    `"chicken breast" returned ${top('chicken breast')}`);
+});
+
+test('a mid-word match ranks below a real one', () => {
+  ok(/^Oats/.test(top('oats')), `"oats" returned ${top('oats')} — groats should not win`);
+  ok(/salmon, Atlantic/.test(top('salmon')), `"salmon" returned ${top('salmon')}`);
+});
+
+test('derivative products rank last', () => {
+  const names = searchLibrary('rice', catalogue).map((f) => f.name);
+  ok(names.indexOf('Rice crackers') > names.findIndex((n) => /^Rice, white/.test(n)),
+    'crackers should trail actual rice');
+});
+
+test('a query matching nothing returns nothing', () => {
+  ok(searchLibrary('zzzz', catalogue).length === 0, 'no spurious matches');
 });
 
 console.log('\nSelection — the bug that shipped');

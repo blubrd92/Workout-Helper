@@ -92,8 +92,37 @@ export const SENTINELS = [
   ['yogurt', /yogurt/i],
 ];
 
-/** Does this description look like one of the staples above? */
+/**
+ * Derivative and processed forms.
+ *
+ * These are the entries that crowded out the staples in the second run: searching
+ * "chicken breast" returned breaded tenders and oven-roasted deli roll, and "rice"
+ * returned crackers, bran and flour, because those have SHORTER names than the
+ * canonical descriptions and the ranking rewarded brevity.
+ *
+ * They are demoted rather than excluded — oat bran and rice flour are real foods,
+ * they just should not outrank rice and oats. With a cap in play, demotion usually
+ * amounts to exclusion, which is the intent.
+ */
+const DERIVATIVE = /\b(breaded|batter|battered|nuggets?|patty|patties|rolls?|dried|dehydrated|powdered?|flour|bran|instant|imitation|substitute|candied|sweetened|crackers?|chips?|puffs?|sticks?|paste|extract|concentrate|infant)\b/i;
+
+/**
+ * Words that mark a description as a form you actually eat, which is what a food
+ * log wants: "cooked, roasted" over "raw, unprepared" for meat, and plain "raw" for
+ * produce.
+ */
+const EATEN_FORM = /\b(cooked|roasted|boiled|baked|grilled|braised|steamed|raw)\b/i;
+
+/**
+ * Does this description look like a PLAIN version of one of the staples above?
+ *
+ * The "plain" half matters. The second run passed this check while containing only
+ * "Chicken breast tenders, breaded" and "Chicken breast, roll, oven-roasted" — the
+ * sentinel matched, the file was still missing the food. Requiring a non-derivative
+ * match is what makes the guard mean "the actual staple is in here".
+ */
 function isSentinel(name) {
+  if (DERIVATIVE.test(name)) return false;
   return SENTINELS.some(([, matcher]) => matcher.test(name));
 }
 
@@ -217,12 +246,13 @@ export function finalize(records) {
   }
 
   // The check that actually catches a bad run — see SENTINELS above.
-  const missing = SENTINELS.filter(([, matcher]) => !final.some((r) => matcher.test(r.name)));
+  const missing = SENTINELS.filter(([, matcher]) =>
+    !final.some((r) => matcher.test(r.name) && !DERIVATIVE.test(r.name)));
   if (missing.length) {
     throw new Error(
-      `These staples are missing from the result: ${missing.map(([label]) => label).join(', ')}. `
-      + 'That means the filtering or the record cap threw away something basic. '
-      + 'Refusing to overwrite the existing dataset.',
+      `No plain version of these staples made it into the result: ${missing.map(([label]) => label).join(', ')}. `
+      + 'Processed variants do not count — a file with breaded chicken tenders but no chicken breast '
+      + 'is the failure this check exists for. Refusing to overwrite the existing dataset.',
     );
   }
 
@@ -328,15 +358,24 @@ export function stapleScore(food, name) {
     A staple is never a candidate for the cap.
 
     Ranking alone is a heuristic, and a heuristic will eventually rank something
-    basic below 2500 other things — "Cereals, oats, regular and quick, not
-    fortified, dry" carries four commas and scores badly for it. Rather than hope
-    the heuristic behaves, put anything matching a sentinel out of reach of the cut
-    entirely. The check at the end then only has to catch filtering mistakes.
+    basic below 2500 other things. Rather than hope it behaves, put anything
+    matching a sentinel out of reach of the cut entirely. The check at the end then
+    only has to catch filtering mistakes.
   */
   if (isSentinel(name)) score += 10000;
   if (food.dataType === 'Foundation') score += 50;      // newer, cleaner analyses
-  score -= (name.match(/,/g) || []).length * 6;         // each clause is more specific
-  score -= name.length / 12;                            // and shorter is more generic
+
+  /*
+    NOTE: an earlier version subtracted 6 points per comma, on the theory that
+    USDA descriptions get more specific with each clause. That is true and it was
+    exactly backwards. The canonical staples are the LONG ones — "Chicken,
+    broilers or fryers, breast, meat only, cooked, roasted" is five clauses — while
+    "Chicken breast, roll" and "Rice crackers" are short because they are products.
+    Penalising commas cut the food and kept the snack.
+  */
+  if (EATEN_FORM.test(name)) score += 40;
+  if (DERIVATIVE.test(name)) score -= 200;
+  score -= name.length / 40;                            // a mild tie-break only
   return score;
 }
 
@@ -414,18 +453,35 @@ function cleanName(description) {
  */
 const HOUSEHOLD_UNITS = /\b(cup|tbsp|tablespoon|tsp|teaspoon|slice|piece|egg|fillet|breast|medium|large|small|link|patty|oz)\b/i;
 
-function pickPortion(food) {
+/**
+ * Portion labels that tell a person nothing.
+ *
+ * "1 RACC" is USDA's Reference Amount Customarily Consumed — a regulatory unit,
+ * not something you can picture. 197 records shipped with it. "1 serving" and
+ * "1 portion" are no better. Falling back to "100 g" is honest; printing an
+ * acronym is not.
+ */
+const MEANINGLESS_UNITS = /^(racc|servings?|portions?|quantity not specified|undetermined|unit)$/i;
+
+export function pickPortion(food) {
   const portions = (food.foodPortions || [])
     .map((p) => {
       const grams = p.gramWeight;
       if (typeof grams !== 'number' || grams < 15 || grams > 500) return null;
-      const amount = p.amount ?? 1;
-      const unit = p.measureUnit?.name && p.measureUnit.name !== 'undetermined'
+
+      // USDA sometimes reports amount 0, which produced labels like
+      // "0 breast, bone removed". Treat a missing or zero amount as one.
+      const amount = Number(p.amount) > 0 ? Number(p.amount) : 1;
+
+      const rawUnit = p.measureUnit?.name && p.measureUnit.name !== 'undetermined'
         ? p.measureUnit.name
         : (p.modifier || '');
+      const unit = String(rawUnit).trim();
+      if (!unit || MEANINGLESS_UNITS.test(unit)) return null;
+
       const label = `${trimNumber(amount)} ${unit}`.replace(/\s+/g, ' ').trim();
-      if (!label || /^\d+$/.test(label)) return null;
-      return { grams, label: `${label}${p.portionDescription && !unit ? ` ${p.portionDescription}` : ''}`.trim() };
+      if (!label || /^[\d.]+$/.test(label)) return null;
+      return { grams, label };
     })
     .filter(Boolean);
 
