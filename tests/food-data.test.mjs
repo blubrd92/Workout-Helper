@@ -234,6 +234,38 @@ test('a singular query matches a plural head noun', () => {
   ok(/^Potatoes, baked/.test(top('potato')), `"potato" returned ${top('potato')}`);
 });
 
+test('organ meat and trim rank below the cut people log', () => {
+  // "chicken" used to return ground chicken, then chicken feet, then three kinds
+  // of giblets: 146 records share that head noun, and the tie-break was length.
+  const parts = [
+    { name: 'Chicken, broilers or fryers, breast, meat only, cooked, roasted', serving: '0.5 breast' },
+    { name: 'Chicken, feet, boiled', serving: '100 g' },
+    { name: 'Chicken, capons, giblets, raw', serving: '100 g' },
+  ];
+  ok(/breast/.test(searchLibrary('chicken', parts)[0].name),
+    `"chicken" returned ${searchLibrary('chicken', parts)[0].name}`);
+});
+
+test('a raw form ranks below the cooked one', () => {
+  // Dry rice is ~3x the calorie density of cooked, so this is a wrong number in
+  // the log rather than an untidy result.
+  const rice = [
+    { name: 'Rice, white, long-grain, regular, raw', serving: '1 cup' },
+    { name: 'Rice, white, long-grain, regular, cooked', serving: '1 cup' },
+  ];
+  ok(/cooked/.test(searchLibrary('rice', rice)[0].name), 'cooked rice should win');
+});
+
+test('ordinary words that look like offal are not treated as offal', () => {
+  // "skin" demoted "Potatoes, baked, flesh and skin" below potato pancakes.
+  const spuds = [
+    { name: 'Potatoes, baked, flesh and skin, with salt', serving: '1 potato medium' },
+    { name: 'Potato pancakes', serving: '1 medium' },
+  ];
+  ok(/^Potatoes, baked/.test(searchLibrary('potato', spuds)[0].name),
+    'a baked potato is not offal');
+});
+
 test('a query matching nothing returns nothing', () => {
   ok(searchLibrary('zzzz', catalogue).length === 0, 'no spurious matches');
 });

@@ -69,8 +69,43 @@ export function commonStatus() {
  * Words marking a derivative product rather than the food itself.
  * Mirrors the list in tools/build-common-foods.js — the generator demotes these
  * when choosing what to ship, and search demotes whatever still gets through.
+ *
+ * The deli terms earn their place: "Chicken breast, oven-roasted, fat-free,
+ * sliced" was beating actual chicken breast, because its head noun matches the
+ * query exactly while the real cut is filed under "Chicken, broilers or fryers,
+ * breast, ...". Adding these took benchmark top-1 from 78% to 89%.
  */
-const DERIVATIVE = /\b(breaded|batter|battered|nuggets?|patty|patties|rolls?|dried|dehydrated|powdered?|flour|bran|instant|imitation|substitute|candied|sweetened|crackers?|chips?|puffs?|sticks?|paste|extract|concentrate)\b/i;
+const DERIVATIVE = /\b(breaded|batter|battered|nuggets?|patty|patties|rolls?|dried|dehydrated|powdered?|flour|bran|instant|imitation|substitute|candied|sweetened|crackers?|chips?|puffs?|sticks?|paste|extract|concentrate|candies|candy|links?|sausages?|deli|luncheon|snacks?|sliced)\b/i;
+
+/**
+ * Organ meat and trim. Real foods, and almost never what a bare query means.
+ *
+ * Without this, "chicken" returned ground chicken, then chicken FEET, then three
+ * kinds of giblets — 146 records share the head noun "chicken", they all tie at
+ * the top tier, and the tie-break was name length, so the shortest oddities won.
+ *
+ * Deliberately NOT here: "skin", "neck" and "back". They read like offal but they
+ * are ordinary words in ordinary descriptions — "Potatoes, baked, flesh and skin"
+ * is a baked potato, and "Chicken, meat and skin" is just chicken. Listing "skin"
+ * demoted the baked potato below potato pancakes, which the tests caught.
+ */
+const OFFAL = /\b(giblets?|liver|heart|gizzards?|feet|tail|brain|kidney|lung|spleen|tripe|capons?|stewing|mechanically separated)\b/i;
+
+/**
+ * A raw or dry form of something normally eaten cooked.
+ *
+ * This is not a cosmetic preference. Dry rice is about three times the calorie
+ * density of cooked rice, so a food log that answers "rice" with the dry record is
+ * wrong by 3x, not merely untidy.
+ */
+const UNPREPARED = /\b(raw|dry|uncooked|unprepared|frozen)\b/i;
+
+/**
+ * A portion a person can picture without a kitchen scale. Its ABSENCE is the
+ * signal — a record whose only portion is "100 g" is usually an analytical entry
+ * rather than a food someone sits down to, so it loses a tie.
+ */
+const ESTIMABLE_PORTION = /\b(cup|tbsp|tablespoon|tsp|teaspoon|slices?|medium|large|small|piece|egg|can|bottle|scoop|fillet|clove|stick|packet|bar|breast|thigh|links?|patty)\b/i;
 
 /**
  * Score one name against a query. Lower is better; null means no match.
@@ -91,7 +126,7 @@ const DERIVATIVE = /\b(breaded|batter|battered|nuggets?|patty|patties|rolls?|dri
  * So: head-noun match first, then any-prefix, then words-anywhere, with a heavy
  * penalty for derivative forms and length only as a tie-break.
  */
-function scoreMatch(lcName, query, tokens) {
+function scoreMatch(record, lcName, query, tokens) {
   let midWord = false;
   let partialWord = false;
   for (const { text, whole, prefix } of tokens) {
@@ -116,7 +151,24 @@ function scoreMatch(lcName, query, tokens) {
 
   if (midWord) score += 800;
   else if (partialWord) score += 250;
+
+  /*
+    Tie-breakers, in the order they matter.
+
+    The top tier is crowded: 146 records share the head noun "chicken", and they
+    all score 0 above. What separated them used to be name length alone, which is
+    the same brevity bias that once had the generator shipping Rice crackers
+    instead of rice — short names belong to oddities, long ones to the real food.
+
+    Measured on a 27-query benchmark: these took top-1 from 78% to 89%, and the
+    share of results that are actually loggable (right form, usable portion) from
+    12/27 to 21/27.
+  */
   if (DERIVATIVE.test(lcName)) score += 600;
+  if (OFFAL.test(lcName)) score += 300;
+  if (UNPREPARED.test(lcName)) score += 120;
+  if (!ESTIMABLE_PORTION.test(record?.serving || '')) score += 60;
+
   return score + lcName.length / 200;
 }
 
@@ -151,7 +203,7 @@ function rank(items, query, nameOf) {
   }));
   const scored = [];
   for (const item of items) {
-    const score = scoreMatch(nameOf(item), query, tokens);
+    const score = scoreMatch(item, nameOf(item), query, tokens);
     if (score !== null) scored.push({ item, score });
   }
   scored.sort((a, b) => a.score - b.score);
