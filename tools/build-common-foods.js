@@ -160,14 +160,24 @@ const EXCLUDE_PATTERNS = [
 ];
 
 /**
- * Brand names, which SR Legacy writes in capitals: "Beverages, drink mix, QUAKER
- * OATS, GATORADE, orange flavor". Three or more capitals in a row is a reliable
- * signal, and generic descriptions essentially never contain one.
+ * Brand names. Two mechanisms, because USDA writes them two ways.
  *
- * Packaged goods are explicitly out of scope for this app — they are faster typed
- * into your own library once than searched for repeatedly.
+ * 1. SHOUTED: "Beverages, drink mix, QUAKER OATS, GATORADE, orange flavor".
+ *    Note there is deliberately NO \b before the capitals run. The first version
+ *    used /\b[A-Z]{3,}\b/ and let nine "McDONALD'S, ..." records through — the
+ *    lowercase "c" in "Mc" means there is no word boundary in front of DONALD,
+ *    and the trailing "'S" kills the one behind it. Anchoring the pattern to word
+ *    boundaries was checking for a tidiness the data does not have.
+ *
+ * 2. TITLE CASE: "Oscar Mayer, Chicken Breast (honey glazed)" carries no capitals
+ *    run at all, so no pattern over letter case will find it. A short explicit
+ *    list is the honest mechanism for these; add to it when one gets through.
+ *
+ * Packaged and restaurant goods are a stated non-goal for this app — they are
+ * faster typed into your own library once than searched for repeatedly.
  */
-const BRAND_PATTERN = /\b[A-Z]{3,}\b/;
+const BRAND_PATTERN = /[A-Z]{3,}/;
+const KNOWN_BRANDS = /\b(mcdonald|burger king|wendy's|kentucky fried|pizza hut|taco bell|subway|starbucks|domino's|oscar mayer|kraft|nestle|general mills|kellogg|quaker|gatorade|hormel|tyson|campbell's|hershey|nabisco)\b/i;
 
 async function main() {
   const apiKey = process.env.USDA_API_KEY;
@@ -344,7 +354,7 @@ function redact(url) {
 
 export function isExcluded(description) {
   if (!description) return true;
-  if (BRAND_PATTERN.test(description)) return true;
+  if (BRAND_PATTERN.test(description) || KNOWN_BRANDS.test(description)) return true;
   return EXCLUDE_PATTERNS.some((pattern) => pattern.test(description));
 }
 

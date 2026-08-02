@@ -350,8 +350,12 @@ async function run(page, shot) {
 
   await page.fill('.sheet input[type="search"]', 'chicken');
   await page.waitForSelector('text=Common foods (USDA)', { timeout: 5000 });
+  // Asserts the lazy load and search path work, NOT ranking quality — that is the
+  // benchmark's job (tests/food-data.test.mjs and the search benchmark), which can
+  // measure it across 27 queries instead of one string in a DOM node.
   await check('the bundled dataset returns matches', async () =>
-    (await page.textContent('.sheet')).includes('Chicken breast'));
+    (await page.locator('.sheet .list-row').count()) > 1
+    && /chicken/i.test(await page.textContent('.sheet')));
   await check('the dataset loaded only once the search asked for it', async () => {
     const fetched = await page.evaluate(() => performance.getEntriesByType('resource')
       .some((r) => r.name.includes('common-foods.json')));

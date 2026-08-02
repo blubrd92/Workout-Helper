@@ -78,6 +78,35 @@ test('drops ALL-CAPS brand names', () => {
   ok(isExcluded('Babyfood, Baby MUM MUM Rice Biscuits'), 'MUM MUM');
 });
 
+test('drops brands whose capitals have no word boundary', () => {
+  // Nine of these shipped. /\b[A-Z]{3,}\b/ misses "McDONALD'S" because the
+  // lowercase "c" removes the boundary before DONALD and the "'S" removes the one
+  // after it — the pattern was checking for a tidiness the data does not have.
+  ok(isExcluded("McDONALD'S, Egg McMUFFIN"), 'McDONALD\'S');
+  ok(isExcluded("McDONALD'S, Sausage Biscuit with Egg"), 'sausage biscuit');
+  ok(isExcluded('Bacon, Egg & Cheese McGRIDDLES'), 'McGRIDDLES');
+});
+
+test('drops title-case brands that carry no capitals run at all', () => {
+  // "Oscar Mayer, Chicken Breast (honey glazed)" ranked 6th for "chicken breast".
+  // No pattern over letter case can catch it; an explicit list is the honest fix.
+  ok(isExcluded('Oscar Mayer, Chicken Breast (honey glazed)'), 'Oscar Mayer');
+  ok(isExcluded('Kellogg, corn flakes'), 'Kellogg');
+});
+
+test('brand filtering does not catch legitimate descriptions', () => {
+  for (const name of [
+    'Chicken, broilers or fryers, breast, meat only, cooked, roasted',
+    'Milk, whole, 3.25% milkfat, with added vitamin D',
+    'Cheese, cheddar',
+    'Oil, olive, salad or cooking',
+    'Butter, salted',
+    'Salmonberries, raw (Alaska Native)',
+  ]) {
+    ok(!isExcluded(name), `should keep: ${name}`);
+  }
+});
+
 test('drops alcohol, restaurant and fast food entries', () => {
   ok(isExcluded('Alcoholic beverage, rice (sake)'), 'sake');
   ok(isExcluded('Fast foods, cheeseburger, double'), 'fast food');
