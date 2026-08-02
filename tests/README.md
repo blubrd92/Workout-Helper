@@ -8,6 +8,7 @@ Four suites, none of which needs a Firebase project. Run them from the repo root
 | Food dataset generator | `npm test` | Node only |
 | Browser smoke test | `node tests/browser/smoke.mjs` | a global Playwright install |
 | Security rules | see below | Firebase CLI + a JDK |
+| Search benchmark | `node tests/search-benchmark.mjs` | Node only |
 
 `npm test` runs the two Node suites.
 
@@ -76,7 +77,22 @@ what suite 3 is for.
 
 **Status: passing (55 checks).**
 
-## 4. Security rules — `tests/rules/rules.test.mjs`
+## 4. Search benchmark — `node tests/search-benchmark.mjs`
+
+Not pass/fail — a measurement, and the yardstick for any change to food search or
+dataset selection. Reports three numbers that do not move together: top-1/top-3
+accuracy over 27 real queries, "loggable" (could you log the top hit without being
+wrong by 2-3x), and dataset coverage of staples that must exist at all.
+
+It exists because ranking here was fixed four times by eye and each fix broke
+something the last one got right. Optimising top-1 alone can lower loggability
+below where it started. See HANDOFF.md for the full list of what has been tried
+and failed.
+
+**Status: informational.** Current: top-1 24/27, top-3 25/27, loggable 21/27,
+coverage 9/15.
+
+## 5. Security rules — `tests/rules/rules.test.mjs`
 
 ```
 npm install --no-save @firebase/rules-unit-testing
