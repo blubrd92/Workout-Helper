@@ -23,6 +23,10 @@ export function stepper({ value = null, min = 0, max = 999, step = 1, label = ''
     type: 'number',
     inputmode: 'numeric',
     pattern: '[0-9]*',
+    // An empty field means "not logged", which is different from zero and must
+    // stay distinguishable. The dash says "nothing here yet" so a blank box does
+    // not read as broken.
+    placeholder: '–',
     value: value === null || value === undefined ? '' : value,
     min,
     max,

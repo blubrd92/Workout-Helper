@@ -14,7 +14,7 @@
 
 import { el, clear, sectionTitle, field, stepper, tankSelector, segmented, asyncButton, empty } from '../components.js';
 import * as store from '../store.js';
-import { blankEntries, blankEntry, isEntryLogged, countLoggedSets, valueStep, valueLabel } from '../sets.js';
+import { blankEntries, blankEntry, isEntryLogged, countLoggedSets, describeSets, valueStep, valueLabel } from '../sets.js';
 import { exerciseKey } from '../plan-parser.js';
 import { todayISO, formatDate, toast, isValidISO, confirmDangerous, add } from '../util.js';
 import { WATCH_STATUSES } from '../config.js';
@@ -353,6 +353,7 @@ function renderExerciseCard(exercise, { persist, lastLoads }) {
       exercise.done = !exercise.done;
       check.setAttribute('aria-pressed', String(exercise.done));
       card.classList.toggle('done', exercise.done);
+      setCollapsed(exercise.done);
       persist();
     },
   }, '✓');
@@ -409,71 +410,110 @@ function renderExerciseCard(exercise, { persist, lastLoads }) {
   };
   renderSets();
 
+  // The card body collapses once the exercise is ticked done, leaving a one-line
+  // summary. Seven open exercise cards is about five screens of scrolling; folding
+  // them away as you finish them means the session shrinks as you work through it.
+  const body = el('div', { class: 'exercise-body' }, [
+    field('Load', loadInput),
+    lastChip ? el('div', { class: 'chips', style: { marginTop: '-.4rem', marginBottom: '.6rem' } }, [lastChip]) : null,
+    el('p', { class: 'sets-caption' },
+      `Tank = ${exercise.type === 'seconds' ? 'seconds' : 'reps'} left at the end of the set`),
+    setsWrap,
+    exercise.cues ? el('p', { class: 'cues' }, exercise.cues) : null,
+    exercise.video && /^https?:\/\//i.test(exercise.video)
+      ? el('p', { class: 'video' }, [
+        el('a', { href: exercise.video, target: '_blank', rel: 'noopener noreferrer' }, 'Video \u2197'),
+      ])
+      : null,
+  ]);
+
+  // Expanding is deliberately separate from un-ticking: you may want to look at
+  // what you logged without marking the exercise unfinished again.
+  const summary = el('button', {
+    class: 'exercise-summary',
+    type: 'button',
+    onclick: () => setCollapsed(false),
+  });
+
+  let collapsed = !!exercise.done;
+
+  function setCollapsed(next) {
+    collapsed = next;
+    card.classList.toggle('collapsed', collapsed);
+    const logged = describeSets(exercise);
+    clear(summary, [
+      el('span', { class: 'grow' }, logged.length
+        ? logged.map((s) => el('span', { class: 'set-pill' }, s.text))
+        : el('span', { class: 'faint small' }, 'Nothing logged')),
+      el('span', { class: 'faint small nowrap' }, 'Edit'),
+    ]);
+  }
+
   add(card,
     el('div', { class: 'exercise-head' }, [
       el('div', { class: 'grow' }, [
         el('h3', {}, exercise.name),
         el('p', { class: 'target' }, [
           exercise.target,
-          el('span', { class: 'faint' }, ` · ${exercise.sets} sets · rest ${exercise.rest}s`),
+          el('span', { class: 'faint' }, ` \u00b7 ${exercise.sets} sets \u00b7 rest ${exercise.rest}s`),
         ]),
       ]),
       check,
     ]),
-    field('Load', loadInput),
-    lastChip ? el('div', { class: 'chips', style: { marginTop: '-.4rem', marginBottom: '.6rem' } }, [lastChip]) : null,
-    // Said once per exercise rather than once per set: with three sets and two
-    // sides that caption was repeating six times down a single card.
-    el('p', { class: 'sets-caption' },
-      `Sets — ${exercise.type === 'seconds' ? 'seconds' : 'reps'}, then reps left in the tank`),
-    setsWrap,
-    exercise.cues ? el('p', { class: 'cues' }, exercise.cues) : null,
-    exercise.video && /^https?:\/\//i.test(exercise.video)
-      ? el('p', { class: 'video' }, [
-        el('a', { href: exercise.video, target: '_blank', rel: 'noopener noreferrer' }, 'Video ↗'),
-      ])
-      : null,
+    summary,
+    body,
   );
 
+  setCollapsed(collapsed);
   return card;
 }
 
 /**
- * The rows for one set. A per-side exercise gets two: left and right are always
- * logged separately, never averaged or combined.
+ * One set, as a bounded block with its number stated once.
+ *
+ * A per-side exercise puts left and right inside the same block — they are two
+ * sides of one set, not two sets. Previously they were four sibling rows divided
+ * by identical rules, so two sets of a per-side exercise read as four sets.
+ *
+ * Every tank control carries the word "tank" beside it. Five bare numbers under a
+ * rep count are ambiguous on their own, and the one caption at the top of the card
+ * has scrolled away by the time you are entering set three.
  */
 function renderSetRows(exercise, entry, index, persist) {
-  const wrap = el('div');
+  const unit = exercise.type === 'seconds' ? 'sec' : 'reps';
 
-  const sideRow = (side, sideLabel) => {
-    const label = sideLabel ? `${index + 1} ${sideLabel}` : String(index + 1);
-    return el('div', { class: 'set-row' }, [
-      el('span', { class: 'set-label' }, label),
-      stepper({
-        value: side.value,
-        min: 0,
-        max: exercise.type === 'seconds' ? 3600 : 200,
-        step: valueStep(exercise),
-        label: `${valueLabel(exercise)} for set ${label} of ${exercise.name}`,
-        onChange: (v) => { side.value = v; persist(); },
-      }),
-      el('span', { class: 'small faint' }, exercise.type === 'seconds' ? 'sec' : 'reps'),
-      el('div', { class: 'tank' }, [
+  const sideBlock = (side, sideLabel) => {
+    const name = sideLabel ? `set ${index + 1} ${sideLabel}` : `set ${index + 1}`;
+    return [
+      el('div', { class: 'set-row' }, [
+        el('span', { class: 'side-label' }, sideLabel || ''),
+        stepper({
+          value: side.value,
+          min: 0,
+          max: exercise.type === 'seconds' ? 3600 : 200,
+          step: valueStep(exercise),
+          label: `${valueLabel(exercise)} for ${name} of ${exercise.name}`,
+          onChange: (v) => { side.value = v; persist(); },
+        }),
+        el('span', { class: 'unit' }, unit),
+      ]),
+      el('div', { class: 'tank-row' }, [
+        el('span', { class: 'tank-label' }, 'tank'),
         tankSelector({
           tank: side.tank,
           plus: side.plus,
           onChange: ({ tank, plus }) => { side.tank = tank; side.plus = plus; persist(); },
         }),
       ]),
-    ]);
+    ];
   };
 
-  if (exercise.perSide) {
-    wrap.append(sideRow(entry.left, 'L'), sideRow(entry.right, 'R'));
-  } else {
-    wrap.append(sideRow(entry, ''));
-  }
-  return wrap;
+  return el('div', { class: 'set-group' }, [
+    el('div', { class: 'set-head' }, `Set ${index + 1}`),
+    exercise.perSide
+      ? [sideBlock(entry.left, 'L'), sideBlock(entry.right, 'R')]
+      : sideBlock(entry, ''),
+  ]);
 }
 
 function renderFooter(session, { persist, editing, navigate }) {

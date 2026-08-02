@@ -46,6 +46,7 @@
   --radius: 14px;
   --radius-sm: 10px;
   --tap: 44px;               /* minimum tap target, per the spec */
+  --tabbar: 58px;            /* bottom nav height; comfortably above the floor */
   --pad: 15px;
   --maxw: 34rem;
 
@@ -118,11 +119,29 @@ b, strong { font-weight: 620; }
 .view {
   max-width: var(--maxw);
   margin: 0 auto;
-  padding: var(--pad) var(--pad) calc(var(--tap) + 3rem);
+  padding: var(--pad) var(--pad) calc(var(--tabbar) + 2rem);
   outline: none;
+  /*
+    Keeps short screens from collapsing the document to less than a screenful.
+    Without this, page height swung between ~840px and ~4600px as you moved
+    between tabs, and on a phone that makes the browser's own URL bar expand and
+    collapse — which physically moves the fixed bar at the bottom.
+  */
+  min-height: calc(100dvh - 8.5rem);
 }
 
-/* Bottom nav: five equal targets within thumb reach. */
+/*
+  Bottom nav: five equal targets within thumb reach.
+
+  Two rules here exist specifically to stop the row appearing to move when you
+  switch tabs:
+    - the background is fully opaque. It used to be translucent with a backdrop
+      blur, so different page content showed through on each tab and the bar
+      itself looked different even when it had not moved.
+    - the active tab changes COLOR ONLY, never font-weight. The five labels are
+      already five different widths; bolding one made it swell outward from its
+      centre while its neighbours stayed put, which read as the row shifting.
+*/
 .tabbar {
   position: fixed;
   bottom: 0;
@@ -131,26 +150,39 @@ b, strong { font-weight: 620; }
   z-index: 6;
   display: grid;
   grid-template-columns: repeat(5, 1fr);
-  background: rgba(255, 255, 255, .94);
-  backdrop-filter: saturate(1.4) blur(8px);
+  background: var(--surface);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabbar a {
   position: relative;
-  min-height: var(--tap);
-  display: grid;
-  place-items: center;
+  min-height: var(--tabbar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .18rem;
   text-decoration: none;
   color: var(--faint);
-  font-size: .75rem;
-  font-weight: 550;
-  letter-spacing: .005em;
-  padding: .55rem .2rem;
+  font-size: .8rem;
+  font-weight: 550;              /* constant across states — see the note above */
+  letter-spacing: .004em;
+  padding: .45rem .2rem;
   transition: color .15s var(--ease);
   -webkit-tap-highlight-color: transparent;
 }
-.tabbar a[aria-current="page"] { color: var(--ink); font-weight: 640; }
+.tabbar a svg {
+  width: 23px;
+  height: 23px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke .15s var(--ease), transform .15s var(--ease);
+}
+.tabbar a[aria-current="page"] { color: var(--ink); }
+.tabbar a[aria-current="page"] svg { stroke: var(--house-deep); stroke-width: 2; }
 /* A small pill above the active tab, rather than a full-width border. */
 .tabbar a[aria-current="page"]::before {
   content: "";
@@ -417,7 +449,13 @@ input[type="checkbox"] { width: 24px; height: 24px; flex: 0 0 auto; accent-color
 .stepper button:hover { background: var(--house-wash); }
 .stepper button:active { background: var(--house); }
 .stepper input {
-  width: 3.5rem;
+  /*
+    Its own width and padding, not the shared input padding — that is .7rem a side
+    and clipped a two-digit rep count. Sized to hold three digits, because a timed
+    hold is entered in seconds.
+  */
+  width: 4.3rem;
+  padding: .5rem .3rem;
   min-height: var(--tap);
   text-align: center;
   border: none;
@@ -506,25 +544,102 @@ input[type="checkbox"] { width: 24px; height: 24px; flex: 0 0 auto; accent-color
 .check:active { transform: scale(.92); }
 .check[aria-pressed="true"] { background: #e2efe7; border-color: var(--green); color: var(--green); }
 
+/*
+  One set is one bounded block, with its number stated once at the top. For a
+  per-side exercise both sides live inside the same block, because L and R are two
+  sides of one set — not two sets.
+*/
+.set-group {
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: .1rem .6rem .6rem;
+  margin-bottom: .5rem;
+  background: var(--house-tint);
+}
+.set-head {
+  font-size: .68rem;
+  font-weight: 660;
+  text-transform: uppercase;
+  letter-spacing: .09em;
+  color: var(--faint);
+  padding: .45rem 0 .1rem;
+}
+
 .set-row {
   display: flex;
   align-items: center;
-  gap: .55rem;
-  padding: .55rem 0;
-  border-top: 1px solid var(--line-soft);
-  flex-wrap: wrap;
+  gap: .5rem;
+  padding: .3rem 0 .15rem;
 }
-.set-label {
-  font-size: .74rem;
-  font-weight: 620;
-  color: var(--faint);
-  width: 2.5rem;
+.side-label {
+  width: 1.1rem;
   flex: 0 0 auto;
-  text-transform: uppercase;
-  letter-spacing: .05em;
-  font-variant-numeric: tabular-nums;
+  font-size: .78rem;
+  font-weight: 660;
+  color: var(--muted);
+  text-align: center;
 }
-.set-row .tank { flex: 1 1 100%; padding-left: 2.5rem; }
+.set-row .unit { font-size: .78rem; color: var(--faint); }
+.set-row .stepper { background: var(--surface); }
+
+/*
+  The tank sits on its own row, labelled, and styled a step quieter than the rep
+  entry above it: reps are the primary number, tank qualifies it.
+*/
+.tank-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: 0 0 .35rem 1.1rem;
+}
+.tank-label {
+  font-size: .7rem;
+  font-weight: 620;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--faint);
+  flex: 0 0 auto;
+  width: 2.5rem;
+}
+.tank-row .segmented { flex: 1; gap: .25rem; }
+.tank-row .segmented button {
+  font-size: .84rem;
+  background: var(--surface);
+  border-color: var(--line-soft);
+  color: var(--faint);
+}
+.tank-row .segmented button:hover { border-color: var(--house-edge); color: var(--muted); }
+.tank-row .segmented button[aria-pressed="true"] {
+  background: var(--house);
+  border-color: var(--house-edge);
+  color: var(--ink);
+}
+
+/*
+  A ticked exercise folds to a one-line summary. Seven open cards is about five
+  screens of scrolling; folding them as you finish means the session shrinks as you
+  work through it. Expanding is separate from un-ticking — you can look at what you
+  logged without marking the exercise unfinished.
+*/
+.exercise-summary { display: none; }
+.exercise.collapsed .exercise-body { display: none; }
+.exercise.collapsed .exercise-summary {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  min-height: var(--tap);
+  padding: .3rem 0 0;
+  margin: 0;
+  background: none;
+  border: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.exercise.collapsed .exercise-summary:hover { background: var(--house-tint); box-shadow: 0 0 0 .4rem var(--house-tint); }
+.exercise.collapsed .exercise-summary .set-pill { margin-bottom: 0; }
 
 /* ---------------------------------------------------------------- lists */
 
@@ -715,7 +830,7 @@ td.sets { white-space: normal; min-width: 11rem; }
 #toast {
   position: fixed;
   left: 50%;
-  bottom: calc(var(--tap) + 1.3rem + env(safe-area-inset-bottom));
+  bottom: calc(var(--tabbar) + 1.1rem + env(safe-area-inset-bottom));
   transform: translate(-50%, .5rem);
   background: var(--ink);
   color: #fff;

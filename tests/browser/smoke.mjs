@@ -175,28 +175,71 @@ async function run(page, shot) {
   await page.waitForSelector('text=Bodyweight Squat');
   await check('exercise cards render', async () =>
     (await page.locator('.exercise').count()) === 7);
-  await check('per-side exercise shows L and R rows', async () =>
-    (await page.locator('.set-label', { hasText: 'L' }).count()) > 0);
+  await check('per-side exercise shows L and R', async () =>
+    (await page.locator('.side-label', { hasText: 'L' }).count()) > 0);
   await check('timed exercise asks for seconds', async () =>
     (await page.locator('.set-row', { hasText: 'sec' }).count()) > 0);
+  await check('each set is one bounded block, numbered once', async () => {
+    // The starter plan's first exercise is 2 sets, so exactly 2 blocks and 2 heads.
+    const card = page.locator('.exercise').first();
+    return (await card.locator('.set-group').count()) === 2
+      && (await card.locator('.set-head').count()) === 2;
+  });
+  await check('a per-side set keeps both sides in one block', async () => {
+    // Dead Bug: 2 sets, per side -> 2 blocks, each holding an L and an R.
+    const card = page.locator('.exercise').last();
+    return (await card.locator('.set-group').count()) === 2
+      && (await card.locator('.set-group').first().locator('.side-label').count()) === 2;
+  });
+  await check('every tank control is labelled where it is used', async () => {
+    const tanks = await page.locator('.tank-row .segmented').count();
+    const labels = await page.locator('.tank-row .tank-label').count();
+    if (tanks !== labels) throw new Error(`${tanks} tank controls, ${labels} labels`);
+    return tanks > 0;
+  });
+
+  await page.fill('input[type="text"][aria-label="Load for Bodyweight Squat"]', 'bodyweight');
 
   // First exercise, first set: 10 reps via the stepper, tank 2.
   const firstCard = page.locator('.exercise').first();
   const plus = firstCard.locator('.stepper button', { hasText: '+' }).first();
   for (let i = 0; i < 10; i++) await plus.click();
-  await firstCard.locator('.tank-seg button', { hasText: '2' }).first().click();
+  await firstCard.locator('.tank-row .segmented button', { hasText: '2' }).first().click();
   await check('stepper reached 10', async () =>
     (await firstCard.locator('.stepper input').first().inputValue()) === '10');
+  await check('stepper fields do not clip their value', async () => {
+    // A three-digit value has to fit: a timed hold is entered in seconds.
+    const clipped = await page.evaluate(() => {
+      const input = document.querySelector('.stepper input');
+      input.value = '120';
+      const bad = input.scrollWidth > input.clientWidth + 1;
+      input.value = '';
+      return bad;
+    });
+    if (clipped) throw new Error('three digits overflow the stepper field');
+    return true;
+  });
 
   // Second set on the same exercise, typed rather than tapped.
   await firstCard.locator('.stepper input').nth(1).fill('9');
-  await firstCard.locator('.tank-seg button', { hasText: '1' }).nth(1).click();
+  await firstCard.locator('.tank-row .segmented button', { hasText: '1' }).nth(1).click();
+  await shot('03-logging');
+
+  // Ticking an exercise folds it to a summary; expanding is separate from
+  // un-ticking it.
   await firstCard.locator('.check').click();
   await check('the completion check toggles', async () =>
     (await firstCard.locator('.check').getAttribute('aria-pressed')) === 'true');
+  await check('a ticked exercise folds away', async () =>
+    firstCard.locator('.exercise-body').isHidden());
+  await check('the fold shows what was logged', async () =>
+    (await firstCard.locator('.exercise-summary').textContent()).includes('10 @2'));
 
-  await page.fill('input[type="text"][aria-label="Load for Bodyweight Squat"]', 'bodyweight');
-  await shot('03-logging');
+  await firstCard.locator('.exercise-summary').click();
+  await check('tapping the summary expands it again', async () =>
+    firstCard.locator('.exercise-body').isVisible());
+  await check('expanding does not un-tick the exercise', async () =>
+    (await firstCard.locator('.check').getAttribute('aria-pressed')) === 'true');
 
   // ---- the draft survives a reload
   step('The in-progress session survives a reload');
@@ -367,6 +410,67 @@ async function run(page, shot) {
       return true;
     });
   }
+
+  // ---- the bottom bar must not move between tabs
+  //
+  // The complaint this guards against: the row appeared to shift when switching
+  // tabs, because the active label changed font-weight and so changed width.
+  step('The bottom bar holds still across tabs');
+  const barGeometry = {};
+  for (const tab of ['today', 'food', 'history', 'progress', 'settings']) {
+    await page.click(`a[data-tab="${tab}"]`);
+    await page.waitForTimeout(350);
+    barGeometry[tab] = await page.evaluate(() => [...document.querySelectorAll('.tabbar a')].map((a) => {
+      const box = a.getBoundingClientRect();
+      const range = document.createRange();
+      range.selectNodeContents(a.querySelector('span'));
+      const text = range.getBoundingClientRect();
+      const icon = a.querySelector('svg').getBoundingClientRect();
+      return {
+        y: +box.y.toFixed(1), h: +box.height.toFixed(1),
+        textX: +text.x.toFixed(1), iconX: +icon.x.toFixed(1),
+        weight: getComputedStyle(a).fontWeight,
+      };
+    }));
+  }
+  await check('label font-weight is identical on every tab', () => {
+    const weights = new Set(Object.values(barGeometry).flat().map((t) => t.weight));
+    if (weights.size !== 1) throw new Error(`weights seen: ${[...weights].join(', ')}`);
+    return true;
+  });
+  await check('icons and labels never move between tabs', () => {
+    const tabs = Object.values(barGeometry);
+    for (let i = 0; i < tabs[0].length; i++) {
+      for (const key of ['textX', 'iconX', 'y', 'h']) {
+        const values = tabs.map((t) => t[i][key]);
+        const drift = Math.max(...values) - Math.min(...values);
+        if (drift > 0.5) throw new Error(`tab ${i} ${key} drifts ${drift.toFixed(1)}px`);
+      }
+    }
+    return true;
+  });
+  await check('the bar is opaque, so page content cannot show through', async () => {
+    const style = await page.evaluate(() => {
+      const bar = getComputedStyle(document.querySelector('.tabbar'));
+      return { bg: bar.backgroundColor, filter: bar.backdropFilter };
+    });
+    if (/rgba\([^)]*,\s*0?\.\d+\)/.test(style.bg)) throw new Error(`translucent: ${style.bg}`);
+    if (style.filter && style.filter !== 'none') throw new Error(`backdrop-filter: ${style.filter}`);
+    return true;
+  });
+  await check('short screens still fill the viewport', async () => {
+    // Page height swinging between screens is what makes a phone's URL bar
+    // expand and collapse, moving the fixed bar with it.
+    const heights = [];
+    for (const tab of ['progress', 'history', 'settings']) {
+      await page.click(`a[data-tab="${tab}"]`);
+      await page.waitForTimeout(300);
+      heights.push(await page.evaluate(() => document.documentElement.scrollHeight));
+    }
+    if (heights.some((h) => h < 844)) throw new Error(`heights: ${heights.join(', ')}`);
+    return true;
+  });
+  await shot('10-tabbar');
 
   // ---- layout
   step('Layout at 390px');

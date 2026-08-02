@@ -153,7 +153,10 @@ async function render() {
     viewTitle.textContent = view.title || 'Ledger';
     clear(viewRoot);
     await view.render(viewRoot, params, { navigate, rerender: render });
-    if (token === renderToken) viewRoot.scrollTop = 0;
+    // The window scrolls, not #view — so scroll the window. This used to set
+    // viewRoot.scrollTop, which is a no-op on a non-scrolling element; it only
+    // appeared to work because changing the hash makes the browser jump to top.
+    if (token === renderToken) window.scrollTo(0, 0);
   } catch (err) {
     console.error(err);
     if (token !== renderToken) return;
