@@ -136,11 +136,23 @@ real run.
 #### What is still outstanding
 
 **The data file has not been regenerated, so the benchmark still reports 9/15.**
-Run "Build food data" from the Actions tab (it needs the `USDA_API_KEY` repo
-secret), then run `node tests/search-benchmark.mjs` and compare against the numbers
-at the top of this file. Expect coverage to rise and `loggable` to move by roughly
-±1; if `loggable` drops by more than that, or `checkFeasible()` starts reporting
-unsatisfiable queries, the run is worth investigating rather than committing.
+
+Run it from the Actions tab: "Build food data" -> "Run workflow", and **pick the
+branch this change is on** in the dropdown — the workflow runs the generator from
+whichever branch you select, and on `main` that is still the old selection. It
+needs the `USDA_API_KEY` repository secret (Settings -> Secrets and variables ->
+Actions; free key at <https://fdc.nal.usda.gov/api-key-signup.html>). The job
+fails immediately with a named error if the secret is missing.
+
+The workflow measures the benchmark before and after, runs the tests against the
+new data, and writes both sets of numbers to the run summary, so the result is
+readable without opening the log. It then commits the regenerated file to the
+branch it ran on.
+
+Expect coverage to rise and `loggable` to move by roughly ±1. If `loggable` drops
+by more than that, or `checkFeasible()` starts reporting unsatisfiable queries, the
+run is worth investigating rather than merging — the file is committed to the
+branch, not to `main`, so there is room to look first.
 
 ### 2. Three ranking misses that are inherent ties
 
@@ -224,7 +236,7 @@ changes.
 | `js/foods.js` | Search ranking — `scoreMatch()` is the whole thing. |
 | `tools/build-common-foods.js` | The generator: exclusions, `stapleScore()`, `SENTINELS`, `pickPortion()`. |
 | `tests/food-data.test.mjs` | 30 unit tests over both. Every one encodes a bug that actually shipped. |
-| `.github/workflows/build-food-data.yml` | Manual `workflow_dispatch`. Needs the `USDA_API_KEY` repo secret. |
+| `.github/workflows/build-food-data.yml` | Manual `workflow_dispatch`. Needs the `USDA_API_KEY` repo secret. Benchmarks the dataset before and after, runs the tests, and reports both to the run summary. |
 
 Run everything: `npm test && node tests/search-benchmark.mjs && node tests/browser/smoke.mjs`
 

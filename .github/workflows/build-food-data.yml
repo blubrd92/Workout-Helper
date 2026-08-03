@@ -25,17 +25,62 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Fail early if the API key is missing
+        # Without this the job runs for a minute and then fails inside the script,
+        # which is a slower way to learn the same thing. The secret lives under
+        # Settings -> Secrets and variables -> Actions; get a free key at
+        # https://fdc.nal.usda.gov/api-key-signup.html
+        env:
+          USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+        run: |
+          if [ -z "$USDA_API_KEY" ]; then
+            echo "::error::The repository secret USDA_API_KEY is not set."
+            exit 1
+          fi
+
+      - name: Measure the dataset that is already committed
+        # Recorded BEFORE regenerating, because the benchmark reads whatever is in
+        # data/common-foods.json and there is no other way to compare afterwards.
+        run: |
+          node tests/search-benchmark.mjs | tee /tmp/before.txt
+
       - name: Regenerate data/common-foods.json
         # The USDA key comes from the repository secret USDA_API_KEY and is passed
         # to the script as an environment variable. It is never a workflow input
         # (inputs are echoed into the run summary), never written to a file, and
         # never printed — the script redacts it from any URL it reports.
-        #
-        # Get a free key at https://fdc.nal.usda.gov/api-key-signup.html and store
-        # it under Settings -> Secrets and variables -> Actions.
         env:
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
         run: node tools/build-common-foods.js
+
+      - name: Measure the dataset that was just built
+        run: node tests/search-benchmark.mjs | tee /tmp/after.txt
+
+      - name: Run the tests against the new data
+        # The generator's own rails (MIN_RECORDS, SENTINELS) have already run inside
+        # finalize(). This catches the rest — and this project has shipped a dataset
+        # that passed every count check and was still useless.
+        run: npm test
+
+      - name: Report
+        # The whole point of a manual run is that a person reads the result, so put
+        # it where they will see it rather than 200 lines down in the log.
+        run: |
+          {
+            echo '## Food dataset'
+            echo
+            echo "Records: $(node -e 'console.log(require("./data/common-foods.json").length)')"
+            echo "Size: $(du -h data/common-foods.json | cut -f1) — this is fetched on a phone"
+            echo
+            echo '### Before'
+            echo '```'; cat /tmp/before.txt; echo '```'
+            echo '### After'
+            echo '```'; cat /tmp/after.txt; echo '```'
+            echo
+            echo 'COVERAGE should rise. RANKING top-1 and top-3 should hold or rise.'
+            echo 'A `loggable` drop of more than one, or any query reported unsatisfiable,'
+            echo 'is worth investigating before this commit is merged — see HANDOFF.md.'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Commit the result
         run: |
@@ -47,4 +92,4 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add data/common-foods.json
           git commit -m "Update common foods dataset from USDA FoodData Central"
-          git push
+          git push origin "HEAD:${GITHUB_REF_NAME}"
