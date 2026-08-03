@@ -13,7 +13,10 @@
  * lived.
  */
 
-import { finalize, isExcluded, stapleScore, pickPortion, MAX_RECORDS } from '../tools/build-common-foods.js';
+import {
+  finalize, isExcluded, stapleScore, pickPortion, MAX_RECORDS,
+  normalizeDescription, selectByHeadNoun,
+} from '../tools/build-common-foods.js';
 import { searchLibrary } from '../js/foods.js';
 
 let passed = 0;
@@ -342,6 +345,118 @@ test('duplicates collapse to the higher-scoring record', () => {
   const milk = result.filter((r) => r.name === name);
   ok(milk.length === 1, `expected one record, got ${milk.length}`);
   ok(milk[0].kcal === 149, `kept the wrong duplicate: ${milk[0].kcal}`);
+});
+
+console.log('\nSelection — breadth');
+
+test('USDA bookkeeping is stripped, not treated as a brand', () => {
+  // "Cheese, cheddar (Includes foods for USDA's Food Distribution Program)" is the
+  // canonical cheddar record. The brand filter dropped it, because "USDA" is three
+  // capitals in a row — which is how a 2,490-record food file came to contain 13
+  // cheeses and no cheddar. The note rides on the plainest records in the set.
+  const annotated = "Cheese, cheddar (Includes foods for USDA's Food Distribution Program)";
+  ok(normalizeDescription(annotated) === 'Cheese, cheddar', `got ${normalizeDescription(annotated)}`);
+  ok(!isExcluded(annotated), 'the food must survive its own paperwork');
+  // The genuinely institutional entries are still excluded, on the stripped name.
+  ok(isExcluded('Beef, ground, USDA Commodity, frozen'), 'commodity packs are still out');
+});
+
+test('one food with thousands of records cannot crowd out a food with one', () => {
+  // The shape of the failure this selection replaces: 194 kinds of fish, 146
+  // chicken, 132 beef, 101 veal, and no butter, salt, honey, oil or flour at all.
+  // Sorting globally by score does not pick the best records, it picks the
+  // best-scoring CATEGORY — +40 for a cooking word is unreachable for a food
+  // nobody cooks.
+  const crowd = Array.from({ length: MAX_RECORDS }, (_, i) =>
+    rec(`Fish, species ${String(i).padStart(4, '0')}, cooked, dry heat`, stapleScore({}, 'x, cooked')));
+  const loners = ['Butter, salted', 'Honey', 'Salt, table', 'Oil, olive, salad or cooking', 'Cheese, cheddar']
+    .map((name) => rec(name, stapleScore({}, name)));
+
+  const result = finalize([...crowd, ...loners, ...staples()]);
+  for (const { name } of loners) {
+    ok(result.some((r) => r.name === name), `${name} was crowded out`);
+  }
+});
+
+test('a sentinel guarantees one slot, not one per match', () => {
+  // /\bmilk\b/ matched 43 records and the +10000 bonus made every one of them
+  // immune to the cut. Between milk and potato the sentinel list was holding 511
+  // of 2,500 slots to answer a question that needed one record each.
+  const milks = Array.from({ length: 60 }, (_, i) => rec(`Milk, variety ${String(i).padStart(3, '0')}, fluid`));
+  const result = finalize([...filler(MAX_RECORDS), ...staples(), ...milks]);
+  const kept = result.filter((r) => /^Milk, variety/.test(r.name));
+  ok(kept.length <= 5, `milk variants took ${kept.length} slots`);
+});
+
+test('a food is not shipped twice as "with salt" and "without salt"', () => {
+  // USDA ships most prepared vegetables and grains as a pair with identical energy
+  // and protein. 188 such pairs were in the file — 188 slots spent saying the same
+  // thing twice, in a file with no room for butter.
+  const pair = [
+    rec('Carrots, cooked, boiled, drained, with salt'),
+    rec('Carrots, cooked, boiled, drained, without salt'),
+  ];
+  const result = finalize([...filler(600), ...staples(), ...pair]);
+  ok(result.filter((r) => /^Carrots, cooked/.test(r.name)).length === 1, 'the pair should collapse to one');
+});
+
+test('cuts are distinguished at whichever clause carries them', () => {
+  // "Chicken, broilers or fryers, thigh, meat only, cooked, stewed" — the second
+  // clause is a bird-size qualifier and the CUT, the part anyone searches for, is
+  // the third. Splitting only on the second clause spent the chicken allowance on
+  // four kinds of breast and dropped the thigh.
+  const cuts = ['breast', 'thigh', 'drumstick', 'wing'].flatMap((cut) =>
+    [0, 1, 2].map((i) => rec(`Chicken, broilers or fryers, ${cut}, meat only, cooked, variant ${i}`, 40)));
+  const picked = selectByHeadNoun(cuts, 4).map((r) => r.name);
+  for (const cut of ['breast', 'thigh', 'drumstick', 'wing']) {
+    ok(picked.some((n) => n.includes(`, ${cut},`)), `no ${cut} in ${picked.length} slots: ${picked}`);
+  }
+});
+
+test('a broad head noun spends its slots on different foods', () => {
+  // "Fish" covers 234 records. Ordering its species by score put the 43
+  // shortest-named fish in the file and no tuna, because every species scores the
+  // same and the tie-break was name length.
+  const fish = [
+    ...Array.from({ length: 12 }, (_, i) => rec(`Fish, tuna, form ${i}, cooked, dry heat`, 40)),
+    ...['burbot', 'cusk', 'sucker', 'wolffish'].map((s) => rec(`Fish, ${s}, cooked`, 40)),
+  ];
+  const picked = selectByHeadNoun(fish, 4).map((r) => r.name);
+  ok(picked.filter((n) => /tuna/.test(n)).length <= 2, `tuna took ${picked.length} of 4 slots: ${picked}`);
+  ok(picked.some((n) => /tuna/.test(n)), `tuna missing entirely: ${picked}`);
+});
+
+console.log('\nSelection — which record speaks for a food');
+
+test('stapleScore is a tier, not a near-tie broken by name length', () => {
+  // The length penalty meant two records of the same food never tied, so every
+  // later comparison — cooked over raw, a portion you can picture over "3 oz" —
+  // was unreachable. Raw tuna beat cooked tuna by five characters.
+  ok(stapleScore({}, 'Fish, tuna, skipjack, fresh, cooked, dry heat')
+    === stapleScore({}, 'Fish, tuna, fresh, bluefin, raw'),
+  'two eaten forms of one food must tie, and let the tie-breaks decide');
+});
+
+test('a food is represented by its cooked form, not its shorter raw one', () => {
+  // The file described tuna as "Fish, tuna, fresh, bluefin, raw". Note this only
+  // compares records of the SAME food — preferring cooked as a blanket rule has
+  // been tried, and it fixed rice while breaking broccoli.
+  const tuna = ['Fish, tuna, fresh, bluefin, raw', 'Fish, tuna, skipjack, fresh, cooked, dry heat']
+    .map((name) => rec(name, stapleScore({}, name)));
+  const picked = selectByHeadNoun(tuna, 1).map((r) => r.name);
+  ok(/cooked/.test(picked[0]), `got ${picked[0]}`);
+});
+
+test('the record that speaks for a food has a portion you can picture', () => {
+  // Same food, same preparation, both labels legitimate: "3 oz" is not something
+  // anyone can estimate on a plate, and this is the last chance to prefer the one
+  // that is. It decided chicken thigh.
+  const thigh = [
+    { ...rec('Chicken, broilers or fryers, thigh, meat only, cooked, roasted', 40), serving: '3 oz' },
+    { ...rec('Chicken, broilers or fryers, thigh, meat only, cooked, stewed', 40), serving: '1 cup, chopped or diced' },
+  ];
+  const picked = selectByHeadNoun(thigh, 1);
+  ok(picked[0].serving === '1 cup, chopped or diced', `got ${picked[0].serving}`);
 });
 
 console.log(`\n${passed}/${passed + failed} passed`);
