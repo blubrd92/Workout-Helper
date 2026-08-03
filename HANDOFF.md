@@ -11,22 +11,51 @@ change ranking or dataset selection without running it before and after.
 Current numbers, as of the last commit on `main`:
 
 ```
+RANKING    top-1 25/27 (93%)   top-3 26/27 (96%)   loggable 21/27
+COVERAGE   14/15 staples present
+  missing: olive oil
+```
+
+For comparison, the same benchmark before the selection rewrite and the generator
+run that followed it:
+
+```
 RANKING    top-1 24/27 (89%)   top-3 25/27 (93%)   loggable 21/27
 COVERAGE   9/15 staples present
   missing: cheddar cheese, butter, olive oil, salt, honey, flour
 ```
 
-These are unchanged by the selection rewrite below, and will stay unchanged until
-somebody runs the generator — see "what is still outstanding" in item 1.
+One of the two top-1 points is a benchmark correction rather than a search
+improvement, and should be read as such: the `oats` pattern required `Oats,` with
+a comma, which scored Foundation's plainest possible record — described as exactly
+`Oats` — as a miss. On the same dataset the uncorrected pattern reads 24/27. The
+other point is real: `bread` now returns `Bread, wheat` instead of `Bread, potato`.
 
 ---
 
 ## The three open items
 
-### 1. Coverage — selection rewritten, awaiting a generator run
+### 1. Coverage — done, with one food still missing
 
-**Status: the generator is fixed and measured. The shipped data file is not, and
-cannot be from here.**
+**Status: the selection is rewritten and the generator has been run. The dataset in
+`data/common-foods.json` is the new one. Only olive oil is still missing, and why
+is an open question — see the end of this item.**
+
+What the real run produced, against the file it replaced:
+
+| | before | after |
+|---|---|---|
+| coverage | 9/15 | **14/15** |
+| distinct head nouns | 416 | **824** |
+| largest single head noun | fish, 194 records | rice, 14 records |
+| records carrying a cooking word | 84% | 38% |
+| `with salt` / `without salt` records | 427 | 206 |
+| file size | 256 KB | **241 KB** |
+| top-1 / top-3 / loggable | 24 / 25 / 21 | 25 / 26 / 21 |
+
+Loggable held rather than dropping the point the simulation predicted, and no
+benchmark query is unsatisfiable. The file got smaller while nearly doubling the
+number of foods in it, which is the result the per-head-noun quota was for.
 
 #### What was actually wrong
 
@@ -133,39 +162,66 @@ non-sentinel head nouns after H — which is why **olive oil and salt cannot be
 recovered in simulation**. Both are their own head nouns and should appear in a
 real run.
 
-#### What is still outstanding
+#### Still open: olive oil
 
-**The data file has not been regenerated, so the benchmark still reports 9/15.**
+It is the one coverage staple that did not come back, and **the cause is not
+established**. What is known:
 
-Run it from the Actions tab: "Build food data" -> "Run workflow", and **pick the
-branch this change is on** in the dropdown — the workflow runs the generator from
-whichever branch you select, and on `main` that is still the old selection. It
-needs the `USDA_API_KEY` repository secret (Settings -> Secrets and variables ->
-Actions; free key at <https://fdc.nal.usda.gov/api-key-signup.html>). The job
-fails immediately with a named error if the secret is missing.
+The `Oil` head noun shipped 12 records, one for each distinct second clause it
+had — almond, canola, coconut, corn, flaxseed, industrial, oat, palm, safflower,
+soybean, sunflower, vegetable. There is no olive branch among them, and nothing in
+the file starts with `Olive` except olives and olive loaf. So either no olive oil
+record reached selection at all, or it was branch 13 of 12 and lost the tie-break.
 
-The workflow measures the benchmark before and after, runs the tests against the
-new data, and writes both sets of numbers to the run summary, so the result is
-readable without opening the log. It then commits the regenerated file to the
-branch it ran on.
+Both are plausible and they need different fixes, so **find out which before
+changing anything**. `isExcluded('Oil, olive, salad or cooking')` is false — there
+is a test asserting it — so the exclusion filters are not the obvious culprit.
+Within a head noun, branches are ordered by size, then by `byRank`: score,
+preparation, a portion you can picture, then name length. Every oil scores 0 (none
+carries a cooking word — note `EATEN_FORM` matches "cooked" but not the "cooking"
+in "salad or cooking"), so olive oil would be settled by its portion label and its
+name length against twelve near-identical competitors. That is a coin toss decided
+by punctuation, which is the same complaint item 2 makes about milk and broccoli.
 
-Expect coverage to rise and `loggable` to move by roughly ±1. If `loggable` drops
-by more than that, or `checkFeasible()` starts reporting unsatisfiable queries, the
-run is worth investigating rather than merging — the file is committed to the
-branch, not to `main`, so there is room to look first.
+If it turns out the record is in the pool and simply lost, the honest fix is
+probably a `SENTINELS` entry, and the standing advice against that has weakened
+now that the structural problem is fixed: cheddar, butter, salt, honey and flour
+all arrived without one, and a sentinel now reserves a single slot instead of the
+511 the old `+10000` bonus took. **But keep the matcher loose and check it matches
+something first** — a sentinel that matches nothing fails the whole run, and
+`/olive oil/i` on its own is satisfied by "Mayonnaise, reduced fat, with olive
+oil", which would pass the check while shipping no olive oil at all.
+
+#### Re-running the generator
+
+"Build food data" -> "Run workflow" from the Actions tab. It needs the
+`USDA_API_KEY` repository secret (Settings -> Secrets and variables -> Actions;
+free key at <https://fdc.nal.usda.gov/api-key-signup.html>), and fails immediately
+with a named error if it is missing. The job benchmarks the dataset before and
+after, runs the tests against the new data, and writes both sets of numbers, the
+record count and the file size to the run summary — read that rather than the log.
+It then commits the regenerated file to the branch it ran on.
+
+Watch `loggable` and `checkFeasible()`. A drop of more than a point, or any query
+reported unsatisfiable, is worth investigating before the commit is kept.
 
 ### 2. Three ranking misses that are inherent ties
 
 ```
 milk      -> Milk, sheep, fluid          (want cow's milk)
 broccoli  -> Broccoli, chinese, cooked   (want plain broccoli)
-bread     -> Bread, potato               (want white/wheat bread)
 ```
 
-All three are legitimate records tying at the same scoring tier, resolved by name
+Both are legitimate records tying at the same scoring tier, resolved by name
 length. There is no structural signal in a USDA description that says "this is the
 common one" — that is a curation question, not a ranking one. **Low value, high
 risk of regression.** Consider leaving these alone.
+
+`bread -> Bread, potato` used to be the third of these and is now fixed, though
+not by anything done to the ranker: the new dataset simply contains `Bread, wheat`,
+which it did not before. Worth knowing, because it suggests the remaining two are
+also more likely to move from the dataset side than from `scoreMatch()`. Olive oil
+in item 1 is the same tie in its unresolved form.
 
 ### 3. A pending decision for the owner: two bundled files?
 

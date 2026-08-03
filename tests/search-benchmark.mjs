@@ -60,7 +60,11 @@ export const BENCHMARK = [
   ['brown rice',     /^Rice, brown/i, null],
   ['egg',            /^Eggs?,? ?(whole|scrambled|boiled|fried|poached|raw|large|cooked|$)/i, /yolk|white|beater|substitute/i],
   ['milk',           /^Milk,? (whole|reduced fat|lowfat|low.fat|nonfat|skim|2%|1%|fluid)/i, null],
-  ['oats',           /^(Oats,|Cereals, oats)/i, null],
+  // \b, not a comma: Foundation ships a record described as exactly "Oats", and
+  // requiring "Oats," scored the plainest possible answer as a miss. This is the
+  // same mistake the oats SENTINEL made — anchoring to a spelling USDA does not
+  // always use — and the header above says these patterns must not do it.
+  ['oats',           /^(Oats\b|Cereals, oats)/i, null],
   ['yogurt',         /^Yogurt,/i, null],
   ['lentils',        /^Lentils,? (mature seeds, )?cooked/i, null],
   ['black beans',    /^(Beans, black|Black beans)/i, null],
