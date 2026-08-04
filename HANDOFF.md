@@ -29,9 +29,9 @@ COVERAGE   9/15 staples present
 | loggable | 21/27 | **23/27** |
 | top-3 | 25/27 | 26/27 |
 | top-1 | 24/27 | 24/27 — same three misses |
-| records | 2,490 | 6,227 |
-| distinct head nouns | 416 | 824 |
-| wire size | 44 KB gzipped | 92 KB gzipped |
+| records | 2,490 | 6,170 |
+| distinct head nouns | 416 | 802 |
+| wire size | 44 KB gzipped | 90 KB gzipped |
 
 **top-1 is flat, and honestly so.** It is the same three misses it began with —
 milk, broccoli, bread — which are item 2's ties. `bread` was briefly fixed by the
@@ -67,17 +67,22 @@ Two changes did two different jobs, and it is worth keeping them apart:
 The quota had already extracted every bit of breadth the pool contained. Capacity
 bought depth, and depth is what a food log actually needed.
 
-A quality audit of the enlarged file: no babyfood, fast food, restaurant, alcohol,
-brand or school-lunch records got through; 12% fall back to a "100 g" serving and
-24% are raw forms, both legitimate.
+A quality audit of the enlarged file found one real defect and fixed it: **57
+branded records had got through** — Archway x17, Pepperidge Farm x5, Pillsbury,
+Glutino, Udi's, Schar, Little Debbie and a dozen others. Uncapping did not open
+that hole, it stopped rationing what fell through it, turning one Archway cookie
+into seventeen. They are excluded now and stripped from the shipped file, which is
+why the counts below read 6,170 rather than the 6,227 the run committed. Nothing
+else was wrong: no babyfood, fast food, restaurant, alcohol or school-lunch
+records, 12% falling back to a "100 g" serving and 24% raw forms, both legitimate.
 
 The composition of the file, across both runs — the middle column is the quota
 working under the old 2,500 cap, the last is the same quota with the cap lifted:
 
 | | before | quota, capped | quota, uncapped |
 |---|---|---|---|
-| records | 2,490 | 2,500 | 6,227 |
-| distinct head nouns | 416 | 824 | 824 |
+| records | 2,490 | 2,500 | 6,170 |
+| distinct head nouns | 416 | 824 | 802 |
 | largest head noun | fish, 194 | rice, 14 | beef, 956 |
 | carrying a cooking word | 84% | 38% | 52% |
 | coverage | 9/15 | 14/15 | **15/15** |
@@ -278,29 +283,61 @@ which it did not before. Worth knowing, because it suggests the remaining two ar
 also more likely to move from the dataset side than from `scoreMatch()`. Olive oil
 in item 1 is the same tie in its unresolved form.
 
-### 3. A pending decision for the owner: two bundled files?
+### 3. Decided: one bundled file. The curated set stays in history.
 
-An agent evaluated shipping the 160 hand-curated staples (recoverable with
-`git show e7edbfa:data/common-foods.json`) as a small file ranked *above* the USDA
-set. Measured: **27/27 loggable versus 17/27** at the time, for 11 KB on top of
-255 KB.
+**Status: closed. Declined, on measurement.** The proposal was to ship the 160
+hand-curated staples (`git show e7edbfa:data/common-foods.json`) as a second small
+file ranked above the USDA set. It was recommended at ~70% confidence on the
+strength of one number: **27/27 loggable against 17/27**.
 
-It recommended doing it, at ~70% confidence, and argued against itself well:
+That number no longer holds. Re-measured against the dataset as it now stands:
 
-- The spec (`ledger-claude-code-prompt.md` §4) names **one** bundled file. This is
-  a deviation that needs an explicit yes from the owner.
-- It creates a permanent second source of truth that will disagree with the USDA
-  layer in ways the user sees in one list — `Peanut butter, 188 kcal / 2 tbsp`
-  next to `Peanut butter, creamy, 589 / 100 g`. Both correct, 3x apart.
-- The project's standing rule is "implement exactly what is asked; propose the
-  rest." This was not asked for.
-- The heuristic path's ceiling was measured at 26/27 loggable — near parity — so
-  this is a judgement call about maintenance burden, not a forced move.
+| | curated (160) | USDA (6,170) | both, curated first |
+|---|---|---|---|
+| top-1 | **27/27** | 24/27 | **27/27** |
+| top-3 | **27/27** | 26/27 | **27/27** |
+| loggable | 22/27 | **23/27** | 22/27 |
+| coverage | 12/15 | **15/15** | 15/15 |
 
-Its condition for shipping: give each curated record an `fdc` id plus a test that
-re-derives its values, converting a hand-maintained assertion into a checked one.
+The ten-point lead on loggable — the column the original argument rested on — is
+gone and slightly reversed. All five of the curated file's losses are servings the
+benchmark will not accept (`Chicken breast, skinless, roasted [100 g]`,
+`Almonds [1 oz]`), which is arguably harsh on it, but by the yardstick as written
+the heuristic path has caught up and passed it.
 
-**Do not implement this without the owner saying yes.**
+What the curated file still wins is name matching, 27/27 against 24/27. Those three
+queries are exactly item 2's ties. So the trade on offer is: three top-1 queries,
+in exchange for a permanent second source of truth that disagrees with the USDA
+layer in the same list —
+
+```
+Almond butter              196 kcal / 2 tbsp     (curated)
+Almond butter, creamy      603 kcal / 100 g      (USDA)
+```
+
+— both correct, 3x apart, hand-maintained, and drifting further with every
+regeneration. Not worth three queries.
+
+**Two things settled it beyond the numbers.** The spec (§4) says ship
+`data/common-foods.json`, singular. And it already provides the mechanism for
+"the USDA record is not the one I want": the personal library always ranks above
+the bundled dataset. A user who wants peanut butter to mean 188 kcal / 2 tbsp
+saves it once and it ranks first forever — per-user, self-maintaining, no second
+file and no shared ranker change.
+
+**A cheaper substitute was considered and also rejected.** Instead of a second
+data file, a curated list of preferred record *names* could boost them in
+`scoreMatch()` — fixing milk, broccoli and bread with no duplicate nutrition
+values. Two problems. It encodes the benchmark's expected answers into the thing
+the benchmark measures, and with only 27 queries, poisoning 3 costs 11% of the
+yardstick's independence. And the structural version of the same idea does not
+work: variety-group size, the commonness proxy that fixed tuna in the generator,
+was tested here and fails — `Broccoli, chinese` has more records than
+`Broccoli, raw`, and the largest group under "milk" is `dry`. Fixing milk and
+bread while breaking broccoli is the exact pattern this file already records twice.
+
+If the ties ever become worth solving, solve them as item 2, with a signal that
+generalises — not with a second copy of the data.
 
 ---
 

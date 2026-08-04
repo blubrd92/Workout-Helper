@@ -240,7 +240,35 @@ export function normalizeDescription(description) {
     .replace(/,\s*$/, '')
     .trim();
 }
-const KNOWN_BRANDS = /\b(mcdonald|burger king|wendy's|kentucky fried|pizza hut|taco bell|subway|starbucks|domino's|oscar mayer|kraft|nestle|general mills|kellogg|quaker|gatorade|hormel|tyson|campbell's|hershey|nabisco)\b/i;
+const KNOWN_BRANDS = new RegExp([
+  // Restaurant and fast food.
+  'mcdonald', "wendy's", 'burger king', 'kentucky fried', 'pizza hut', 'taco bell',
+  'subway', 'starbucks', "domino's",
+  // Packaged goods.
+  'oscar mayer', 'kraft', 'nestle', 'general mills', 'kellogg', 'quaker', 'gatorade',
+  'hormel', 'tyson', "campbell's", 'hershey', 'nabisco',
+  /*
+    Added after 23 of these shipped at once. Uncapping the file did not create the
+    hole — it just stopped rationing what fell through it, so one Archway cookie
+    became seventeen. Every name here is title case with no capitals run, which is
+    what makes BRAND_PATTERN useless against them.
+
+    A rule was tried instead of a list and abandoned: "two title-case words in the
+    head noun" reads as a brand and catches most of these, but USDA writes
+    "Alaska Pollock", "Canada Goose", "Sweet Potatoes" and "Peanut Butter" the same
+    way. That is the same lesson /\b[A-Z]{3,}\b/ taught — checking for a tidiness
+    the data does not have. A list is honest about being a list.
+  */
+  'archway', 'pepperidge farm', 'pillsbury', 'glutino', "udi's", "rudi's", 'schar',
+  "mary's gone crackers", 'martha white', 'mckee baking', 'little debbie',
+  'mission foods', 'continental mills', 'krusteaz', 'interstate brands',
+  'lean pockets', 'reddi wip', 'sage valley', "andrea's", 'goya', 'gamesa',
+  'la moderna', 'la ricura', 'weight watcher', 'heinz', 'muscle milk',
+]
+  // Word-anchored, unlike BRAND_PATTERN above: these are ordinary lowercase words,
+  // and an unanchored "goya" or "schar" would match inside an unrelated one.
+  .map((brand) => `\\b${brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`)
+  .join('|'), 'i');
 
 async function main() {
   const apiKey = process.env.USDA_API_KEY;

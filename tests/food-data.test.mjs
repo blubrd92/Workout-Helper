@@ -97,6 +97,29 @@ test('drops title-case brands that carry no capitals run at all', () => {
   ok(isExcluded('Kellogg, corn flakes'), 'Kellogg');
 });
 
+test('drops the title-case brands that shipped 57 records at once', () => {
+  // Lifting the record cap did not create this hole, it stopped rationing what
+  // fell through it: one Archway cookie became seventeen. None of these carry a
+  // capitals run, so only an explicit list catches them.
+  for (const name of [
+    'Archway Home Style Cookies, Peanut Butter',
+    'Pepperidge Farm, Goldfish, Baked Snack Crackers, Cheddar',
+    'Pillsbury, Chocolate Chip Cookies, refrigerated dough',
+    "Udi's, Gluten Free, Soft & Delicious White Sandwich Bread",
+    'Mckee Baking, Little Debbie Nutty Bars, Wafers with Peanut Butter',
+    'Protein supplement, milk based, Muscle Milk, powder',
+  ]) {
+    ok(isExcluded(name), `should drop: ${name}`);
+  }
+});
+
+test('brand names do not match inside ordinary words', () => {
+  // The list is matched case-insensitively against lowercase food words, so it is
+  // word-anchored. Unanchored, "goya" and "schar" match inside unrelated words.
+  ok(!isExcluded('Papaya, raw'), 'goya must not match inside papaya');
+  ok(!isExcluded('Fish, escolar, raw'), 'schar-style substrings must not match');
+});
+
 test('brand filtering does not catch legitimate descriptions', () => {
   for (const name of [
     'Chicken, broilers or fryers, breast, meat only, cooked, roasted',
@@ -105,6 +128,13 @@ test('brand filtering does not catch legitimate descriptions', () => {
     'Oil, olive, salad or cooking',
     'Butter, salted',
     'Salmonberries, raw (Alaska Native)',
+    // These are why the brand rule is a list and not a pattern over letter case:
+    // USDA title-cases plenty of ordinary foods, and "two capitalised words" would
+    // have taken all four.
+    'Alaska Pollock, raw',
+    'Canada Goose, breast meat only, skinless, raw',
+    'Sweet Potatoes, french fried, frozen as packaged',
+    'Peanut Butter, smooth',
   ]) {
     ok(!isExcluded(name), `should keep: ${name}`);
   }
