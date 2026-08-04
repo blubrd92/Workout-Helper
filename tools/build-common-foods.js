@@ -53,7 +53,37 @@ const NUTRIENT_ENERGY_ATWATER_SPECIFIC = 2048;
  * every user and look like nothing happened.
  */
 const MIN_RECORDS = 500;
-export const MAX_RECORDS = 2500;
+
+/**
+ * A runaway guard, NOT a curation knob. Read this before lowering it.
+ *
+ * This was 2,500, on the stated grounds that "the file is 256 KB and fetched on a
+ * phone". That reasoning measured the wrong number. 256 KB is the uncompressed
+ * size; Firebase Hosting serves JSON gzipped, and the wire cost is:
+ *
+ *     2,500 records ->  44 KB gzipped
+ *     ~7,000 records ->  93 KB gzipped      (~11 bytes per extra record)
+ *
+ * On top of that the dataset is loaded LAZILY — js/foods.js fetches it on the
+ * first food search, not at startup — and searching 7,000 records takes 1.1 ms
+ * against a ~16 ms budget for a keystroke to feel instant. So the entire cost of
+ * shipping every generic USDA food is about 50 KB, once, on a connection the user
+ * has already spent more than that on the page itself.
+ *
+ * That 2,500 was the source of the whole selection problem: it forced a choice of
+ * 2,500 out of ~7,000, and every rule for making that choice was wrong in a way
+ * nobody noticed until something basic went missing. Deleting the shortage deletes
+ * the problem. The number below exists only to stop a runaway — it matches the
+ * 100-page ceiling in fetchAllSummaries() — so if a USDA API change ever starts
+ * returning the 1.5-million-record Branded set, the job fails instead of
+ * committing it.
+ *
+ * Relevance is still enforced, just not by a quota: EXCLUDE_PATTERNS drops baby
+ * food, fast food, brands and alcohol, and collapseSaltVariants() drops the
+ * duplicate half of a with/without-salt pair. Those decide what is worth shipping.
+ * This decides nothing.
+ */
+export const MAX_RECORDS = 20000;
 
 /**
  * Staples that must survive filtering, as [label, matcher] pairs.
@@ -233,6 +263,25 @@ async function main() {
   for (const food of details) {
     const record = toRecord(food);
     if (record) records.push(record);
+  }
+
+  /*
+    Optionally keep the candidate pool.
+
+    Everything that does not make it into the file has, until now, existed only in
+    memory for the length of this run and then been discarded. That is why
+    diagnosing a missing food meant reconstructing a pool out of git history and
+    reasoning around the gaps — and why "is olive oil absent from USDA, or did it
+    lose a tie-break?" was unanswerable offline.
+
+    Set POOL_OUT to write the pool as it stands before selection, scores included.
+    The build workflow does this and keeps it as an artifact. It is a diagnostic,
+    never the shipped file.
+  */
+  if (process.env.POOL_OUT) {
+    await mkdir(dirname(process.env.POOL_OUT), { recursive: true });
+    await writeFile(process.env.POOL_OUT, `${JSON.stringify(records)}\n`, 'utf8');
+    console.log(`Wrote the ${records.length}-record candidate pool to ${process.env.POOL_OUT}.`);
   }
 
   const final = finalize(records);

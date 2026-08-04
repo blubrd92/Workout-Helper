@@ -162,6 +162,38 @@ non-sentinel head nouns after H — which is why **olive oil and salt cannot be
 recovered in simulation**. Both are their own head nouns and should appear in a
 real run.
 
+#### The cap is gone, and it should never have been the size it was
+
+`MAX_RECORDS` was 2,500 because "the file is 256 KB and fetched on a phone". That
+measured the uncompressed size. Firebase Hosting serves JSON gzipped:
+
+```
+2,500 records ->  44 KB gzipped      ~11 bytes per additional record
+~7,000 records ->  93 KB gzipped
+```
+
+The dataset is also loaded lazily — `js/foods.js` fetches it on the first food
+search, not at startup — and searching 7,000 records takes 1.1 ms against the
+~16 ms a keystroke can afford. The entire cost of shipping every generic USDA food
+is about 50 KB, once, cached.
+
+So the shortage that caused all of this was imaginary, and **the cap is now a
+runaway guard at 20,000** rather than a curation decision. Relevance is still
+enforced, just not by rationing: `EXCLUDE_PATTERNS` drops baby food, fast food,
+brands and alcohol, and `collapseSaltVariants()` drops the duplicate half of a
+with/without-salt pair. If you want those ~200 pairs back, that function is the
+one place to change — they are identical in energy and protein, which is why they
+go.
+
+Measured on the reconstructed pool, uncapping did not degrade search the way it
+might have: at 4,592 records instead of 2,500, coverage went 13/15 -> 14/15 and
+loggable 21 -> 22, with no query becoming unsatisfiable. More records meant more
+competitors for the ranker and it still came out ahead.
+
+The selection code is unaffected by this. When the budget exceeds the pool,
+`selectByHeadNoun()` simply returns everything, so the quota quietly becomes a
+no-op rather than something that needs unwinding.
+
 #### Still open: olive oil
 
 It is the one coverage staple that did not come back, and **the cause is not
@@ -173,9 +205,16 @@ soybean, sunflower, vegetable. There is no olive branch among them, and nothing 
 the file starts with `Olive` except olives and olive loaf. So either no olive oil
 record reached selection at all, or it was branch 13 of 12 and lost the tie-break.
 
-Both are plausible and they need different fixes, so **find out which before
-changing anything**. `isExcluded('Oil, olive, salad or cooking')` is false — there
-is a test asserting it — so the exclusion filters are not the obvious culprit.
+**The next generator run settles this without any further guessing.** With the cap
+lifted, nothing is cut for want of room: if an olive oil record reaches selection
+at all, it ships. So if olive oil appears, it was a tie-break loss and is now
+fixed; if it is still missing, it is genuinely absent from Foundation and SR
+Legacy or being dropped by a filter — and the candidate pool artifact that run
+uploads will say which, in one grep. Note the reconstructed pool cannot answer
+this: olive oil is an "O" name, so it is in neither of the two source files.
+
+`isExcluded('Oil, olive, salad or cooking')` is false — there is a test asserting
+it — so the exclusion filters are not the obvious culprit.
 Within a head noun, branches are ordered by size, then by `byRank`: score,
 preparation, a portion you can picture, then name length. Every oil scores 0 (none
 carries a cooking word — note `EATEN_FORM` matches "cooked" but not the "cooking"
@@ -199,8 +238,14 @@ oil", which would pass the check while shipping no olive oil at all.
 free key at <https://fdc.nal.usda.gov/api-key-signup.html>), and fails immediately
 with a named error if it is missing. The job benchmarks the dataset before and
 after, runs the tests against the new data, and writes both sets of numbers, the
-record count and the file size to the run summary — read that rather than the log.
-It then commits the regenerated file to the branch it ran on.
+record and head-noun counts, and the gzipped size to the run summary — read that
+rather than the log. It then commits the regenerated file to the branch it ran on.
+
+It also uploads **`candidate-pool`**, an artifact holding every record that
+survived filtering, with scores, before selection chose between them. Download it
+from the run page when a food is missing and you need to know whether USDA ships
+it at all. That pool used to be discarded at the end of every run, which is the
+only reason questions like the olive oil one were ever hard to answer.
 
 Watch `loggable` and `checkFeasible()`. A drop of more than a point, or any query
 reported unsatisfiable, is worth investigating before the commit is kept.

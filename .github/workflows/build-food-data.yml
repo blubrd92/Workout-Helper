@@ -49,9 +49,22 @@ jobs:
         # to the script as an environment variable. It is never a workflow input
         # (inputs are echoed into the run summary), never written to a file, and
         # never printed — the script redacts it from any URL it reports.
+        #
+        # POOL_OUT keeps the candidate pool — every record that survived filtering,
+        # before selection chooses between them. It is not committed; it is kept as
+        # an artifact so a missing food can be diagnosed without guessing whether
+        # USDA ships it at all.
         env:
           USDA_API_KEY: ${{ secrets.USDA_API_KEY }}
+          POOL_OUT: /tmp/candidate-pool.json
         run: node tools/build-common-foods.js
+
+      - name: Keep the candidate pool for diagnosis
+        uses: actions/upload-artifact@v4
+        with:
+          name: candidate-pool
+          path: /tmp/candidate-pool.json
+          retention-days: 30
 
       - name: Measure the dataset that was just built
         run: node tests/search-benchmark.mjs | tee /tmp/after.txt
@@ -69,8 +82,12 @@ jobs:
           {
             echo '## Food dataset'
             echo
-            echo "Records: $(node -e 'console.log(require("./data/common-foods.json").length)')"
-            echo "Size: $(du -h data/common-foods.json | cut -f1) — this is fetched on a phone"
+            echo "Records shipped: $(node -e 'console.log(require("./data/common-foods.json").length)')"
+            echo "Candidates available: $(node -e 'console.log(require("/tmp/candidate-pool.json").length)')"
+            echo "Distinct foods: $(node -e 'console.log(new Set(require("./data/common-foods.json").map(f=>f.name.split(",")[0].trim().toLowerCase())).size)') head nouns"
+            echo
+            echo "Size on disk: $(du -h data/common-foods.json | cut -f1)"
+            echo "Size on the wire: $(gzip -c data/common-foods.json | wc -c | awk '{printf "%.0f KB gzipped", $1/1024}') — the number that matters, and it is lazily loaded"
             echo
             echo '### Before'
             echo '```'; cat /tmp/before.txt; echo '```'
